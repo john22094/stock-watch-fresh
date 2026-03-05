@@ -1,0 +1,146 @@
+import { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Package,
+  ScanBarcode,
+  Warehouse,
+  Bell,
+  Menu,
+  LogOut,
+  User,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+
+const navItems = [
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/produtos", label: "Produtos", icon: Package },
+  { path: "/escanear", label: "Escanear", icon: ScanBarcode },
+  { path: "/paletes", label: "Paletes", icon: Warehouse },
+];
+
+function NavItem({ path, label, icon: Icon, active }: { path: string; label: string; icon: any; active: boolean }) {
+  return (
+    <Link
+      to={path}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+        active
+          ? "bg-sidebar-primary text-sidebar-primary-foreground"
+          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+      )}
+    >
+      <Icon className="h-5 w-5 shrink-0" />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+export default function AppLayout({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
+  const alertCount = 15;
+
+  const sidebar = (
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
+            <Package className="h-4 w-4 text-sidebar-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-sidebar-foreground">ValidaHub</h1>
+            <p className="text-[10px] text-sidebar-foreground/60">Controle de Validade</p>
+          </div>
+        </div>
+      </div>
+
+      <nav className="flex-1 p-3 space-y-1">
+        {navItems.map((item) => (
+          <NavItem key={item.path} {...item} active={location.pathname === item.path} />
+        ))}
+      </nav>
+
+      <div className="p-3 border-t border-sidebar-border space-y-1">
+        <div className="flex items-center gap-3 px-3 py-2.5 text-sm text-sidebar-foreground/70">
+          <User className="h-5 w-5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium truncate">Gerente</p>
+            <p className="text-[11px] opacity-60 truncate">admin@mercado.com</p>
+          </div>
+        </div>
+        <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/50 hover:text-destructive hover:bg-sidebar-accent w-full transition-colors">
+          <LogOut className="h-4 w-4" />
+          <span>Sair</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen flex">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-56 bg-sidebar border-r border-sidebar-border flex-col shrink-0">
+        {sidebar}
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Bar */}
+        <header className="h-14 border-b flex items-center justify-between px-4 bg-card shrink-0">
+          <div className="flex items-center gap-2">
+            <Sheet open={open} onOpenChange={setOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0 w-56 bg-sidebar border-sidebar-border">
+                {sidebar}
+              </SheetContent>
+            </Sheet>
+            <h2 className="text-lg font-semibold">
+              {navItems.find((n) => n.path === location.pathname)?.label ?? "ValidaHub"}
+            </h2>
+          </div>
+
+          <Button variant="ghost" size="icon" className="relative">
+            <Bell className="h-5 w-5" />
+            {alertCount > 0 && (
+              <Badge className="absolute -top-1 -right-1 h-5 min-w-5 px-1 text-[10px] bg-status-danger text-status-danger-foreground border-0 animate-pulse-alert">
+                {alertCount}
+              </Badge>
+            )}
+          </Button>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+      </div>
+
+      {/* Mobile Bottom Nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t flex items-center justify-around h-16 z-50">
+        {navItems.map((item) => {
+          const active = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={cn(
+                "flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-3 rounded-lg transition-colors",
+                active ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              <item.icon className={cn("h-5 w-5", active && "text-primary")} />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
