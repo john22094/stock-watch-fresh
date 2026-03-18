@@ -1,4 +1,6 @@
-import { useMemo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -6,34 +8,14 @@ import {
 import { AlertTriangle, Package, ShieldAlert, Clock, TrendingDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { differenceInDays, parseISO } from "date-fns";
 
-// Mock data
-const expiryData = [
-  { range: "7 dias", count: 15, fill: "hsl(0, 72%, 51%)" },
-  { range: "15 dias", count: 32, fill: "hsl(45, 93%, 47%)" },
-  { range: "30 dias", count: 58, fill: "hsl(142, 71%, 45%)" },
-];
-
-const palletData = [
-  { name: "Palete A", value: 120 },
-  { name: "Palete B", value: 85 },
-  { name: "Palete C", value: 64 },
-  { name: "Palete D", value: 43 },
-];
 const PIE_COLORS = ["hsl(220, 70%, 55%)", "hsl(262, 60%, 55%)", "hsl(180, 60%, 45%)", "hsl(330, 60%, 55%)"];
 
-const urgentProducts = [
-  { id: 1, name: "Leite Integral 1L", shelf: "A1", expiry: "2026-03-08", days: 3 },
-  { id: 2, name: "Iogurte Natural", shelf: "A2", expiry: "2026-03-07", days: 2 },
-  { id: 3, name: "Queijo Mussarela", shelf: "B1", expiry: "2026-03-06", days: 1 },
-  { id: 4, name: "Presunto Fatiado", shelf: "B2", expiry: "2026-03-09", days: 4 },
-  { id: 5, name: "Manteiga 200g", shelf: "A3", expiry: "2026-03-10", days: 5 },
-  { id: 6, name: "Cream Cheese", shelf: "C1", expiry: "2026-03-12", days: 7 },
-];
-
 function StatusBadge({ days }: { days: number }) {
-  if (days <= 1) return <Badge className="status-danger text-[10px]">Urgente</Badge>;
-  if (days <= 3) return <Badge className="status-warning text-[10px]">Atenção</Badge>;
+  if (days <= 0) return <Badge className="status-danger text-[10px]">Vencido</Badge>;
+  if (days <= 3) return <Badge className="status-danger text-[10px]">Urgente</Badge>;
+  if (days <= 7) return <Badge className="status-warning text-[10px]">Atenção</Badge>;
   return <Badge className="status-safe text-[10px]">Seguro</Badge>;
 }
 
@@ -60,6 +42,84 @@ function StatCard({ icon: Icon, label, value, variant }: { icon: any; label: str
 }
 
 export default function DashboardPage() {
+  const { funcionario } = useAuth();
+  const empresaId = funcionario?.empresa_id;
+
+  const { data: estoqueItems = [] } = useQuery({
+    queryKey: ["estoque-dashboard", empresaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("estoque")
+        .select("*, produtos(nome, categoria, marca), prateleiras(nome), paletes(nome)")
+        .eq("empresa_id", empresaId!);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const today = new Date();
+  const withDays = estoqueItems.map((item) => ({
+    ...item,
+    days: differenceInDays(parseISO(item.data_validade), today),
+  }));
+
+  const totalProdutos = withDays.length;
+  const vencidos = withDays.filter((i) => i.days <= 0).length;
+  const vencendo7 = withDays.filter((i) => i.days > 0 && i.days <= 7).length;
+  const vencendo30 = withDays.filter((i) => i.days > 0 && i.days <= 30).length;
+
+  const expiryData = [
+    { range: "7 dias", count: vencendo7, fill: "hsl(0, 72%, 51%)" },
+    { range: "15 dias", count: withDays.filter((i) => i.days > 0 && i.days <= 15).length, fill: "hsl(45, 93%, 47%)" },
+    { range: "30 dias", count: vencendo30, fill: "hsl(142, 71%, 45%)" },
+  ];
+
+  // Group by palete
+  const paleteMap = new Map<string, number>();
+  withDays.forEach((item) => {
+    const name = (item.paletes as any)?.nome ?? "Sem palete";
+    paleteMap.set(name, (paleteMap.get(name) ?? 0) + item.quantidade);
+  });
+  const palletData = Array.from(paleteMap.entries()).map(([name, value]) => ({ name, value }));
+
+  const urgentProducts = withDays
+    .filter((i) => i.days <= 7)
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 10);
+
+  // Repositor: simple view
+  if (funcionario?.cargo === "repositor") {
+    return (
+      <div className="space-y-4 pb-20 md:pb-0">
+        <div className="text-center py-8">
+          <h1 className="text-2xl font-bold">Bem-vindo, {funcionario.nome}</h1>
+          <p className="text-muted-foreground mt-1">Matrícula: {funcionario.matricula} · Cargo: Repositor</p>
+        </div>
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Produtos vencendo em breve</CardTitle></CardHeader>
+          <CardContent>
+            {urgentProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum produto próximo do vencimento.</p>
+            ) : (
+              <div className="space-y-2">
+                {urgentProducts.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <div>
+                      <p className="text-sm font-medium">{(p.produtos as any)?.nome}</p>
+                      <p className="text-[11px] text-muted-foreground">{(p.prateleiras as any)?.nome}</p>
+                    </div>
+                    <StatusBadge days={p.days} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-20 md:pb-0">
       <div>
@@ -67,15 +127,13 @@ export default function DashboardPage() {
         <p className="text-sm text-muted-foreground">Visão geral do controle de validade</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Package} label="Total de Produtos" value={312} variant="default" />
-        <StatCard icon={ShieldAlert} label="Vencidos" value={3} variant="danger" />
-        <StatCard icon={AlertTriangle} label="Vencendo em 7 dias" value={15} variant="warning" />
-        <StatCard icon={Clock} label="Vencendo em 30 dias" value={58} variant="safe" />
+        <StatCard icon={Package} label="Total de Produtos" value={totalProdutos} variant="default" />
+        <StatCard icon={ShieldAlert} label="Vencidos" value={vencidos} variant="danger" />
+        <StatCard icon={AlertTriangle} label="Vencendo em 7 dias" value={vencendo7} variant="warning" />
+        <StatCard icon={Clock} label="Vencendo em 30 dias" value={vencendo30} variant="safe" />
       </div>
 
-      {/* Charts */}
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -107,7 +165,7 @@ export default function DashboardPage() {
               <PieChart>
                 <Pie data={palletData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
                   {palletData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i]} />
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -117,7 +175,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Urgent Products Table */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -140,13 +197,16 @@ export default function DashboardPage() {
               <tbody>
                 {urgentProducts.map((p) => (
                   <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-3 font-medium">{p.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{p.shelf}</td>
-                    <td className="px-4 py-3">{new Date(p.expiry).toLocaleDateString("pt-BR")}</td>
+                    <td className="px-4 py-3 font-medium">{(p.produtos as any)?.nome}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{(p.prateleiras as any)?.nome ?? "-"}</td>
+                    <td className="px-4 py-3">{new Date(p.data_validade).toLocaleDateString("pt-BR")}</td>
                     <td className="px-4 py-3 font-bold">{p.days}</td>
                     <td className="px-4 py-3"><StatusBadge days={p.days} /></td>
                   </tr>
                 ))}
+                {urgentProducts.length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">Nenhum produto próximo do vencimento</td></tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -4,25 +4,116 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
-type Step = "scan" | "form" | "done";
+type Step = "scan" | "form-existing" | "form-new" | "done";
+
+interface FoundProduct {
+  id: string;
+  nome: string;
+  marca: string | null;
+  categoria: string | null;
+}
 
 export default function ScanPage() {
   const [step, setStep] = useState<Step>("scan");
   const [barcode, setBarcode] = useState("");
+  const [foundProduct, setFoundProduct] = useState<FoundProduct | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { funcionario, user } = useAuth();
+  const { toast } = useToast();
 
-  const handleScan = () => {
-    if (barcode.trim()) {
-      setStep("form");
+  // Form fields
+  const [validade, setValidade] = useState("");
+  const [quantidade, setQuantidade] = useState("");
+  const [lote, setLote] = useState("");
+  // New product fields
+  const [nome, setNome] = useState("");
+  const [categoria, setCategoria] = useState("");
+  const [marca, setMarca] = useState("");
+
+  const handleScan = async () => {
+    if (!barcode.trim()) return;
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from("produtos")
+        .select("id, nome, marca, categoria")
+        .eq("codigo_barras", barcode.trim())
+        .eq("empresa_id", funcionario!.empresa_id)
+        .maybeSingle();
+
+      if (data) {
+        setFoundProduct(data);
+        setStep("form-existing");
+      } else {
+        setFoundProduct(null);
+        setStep("form-new");
+      }
+    } catch {
+      toast({ title: "Erro ao buscar produto", variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSave = () => {
-    setStep("done");
-    setTimeout(() => {
-      setStep("scan");
-      setBarcode("");
-    }, 2000);
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      let produtoId = foundProduct?.id;
+
+      if (!produtoId) {
+        // Create new product
+        const { data: newProd, error: prodErr } = await supabase
+          .from("produtos")
+          .insert({
+            nome,
+            codigo_barras: barcode,
+            categoria: categoria || null,
+            marca: marca || null,
+            empresa_id: funcionario!.empresa_id,
+          })
+          .select("id")
+          .single();
+        if (prodErr) throw prodErr;
+        produtoId = newProd.id;
+      }
+
+      const { error } = await supabase
+        .from("estoque")
+        .insert({
+          produto_id: produtoId,
+          data_validade: validade,
+          quantidade: parseInt(quantidade) || 0,
+          lote: lote || null,
+          empresa_id: funcionario!.empresa_id,
+          registrado_por: user!.id,
+        });
+      if (error) throw error;
+
+      setStep("done");
+      setTimeout(() => {
+        resetForm();
+      }, 2000);
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setStep("scan");
+    setBarcode("");
+    setFoundProduct(null);
+    setValidade("");
+    setQuantidade("");
+    setLote("");
+    setNome("");
+    setCategoria("");
+    setMarca("");
   };
 
   return (
@@ -40,14 +131,12 @@ export default function ScanPage() {
           <Button
             size="lg"
             className="w-full h-16 text-lg gap-3"
-            onClick={() => {
-              setBarcode("7891000100103");
-              setStep("form");
-            }}
+            disabled
           >
             <Camera className="h-6 w-6" />
             ESCANEAR PRODUTO
           </Button>
+          <p className="text-[10px] text-muted-foreground">Câmera será habilitada em breve</p>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
@@ -62,51 +151,47 @@ export default function ScanPage() {
               className="font-mono"
               onKeyDown={(e) => e.key === "Enter" && handleScan()}
             />
-            <Button onClick={handleScan}>Buscar</Button>
+            <Button onClick={handleScan} disabled={loading}>
+              {loading ? "..." : "Buscar"}
+            </Button>
           </div>
         </div>
       )}
 
-      {step === "form" && (
+      {(step === "form-existing" || step === "form-new") && (
         <Card className="w-full max-w-sm">
           <CardContent className="p-5 space-y-4">
             <div className="text-center">
               <p className="text-xs text-muted-foreground font-mono">{barcode}</p>
-              <h2 className="text-lg font-bold mt-1">Leite Integral 1L</h2>
-              <p className="text-xs text-muted-foreground">Ninho · Laticínios</p>
+              {step === "form-existing" ? (
+                <>
+                  <h2 className="text-lg font-bold mt-1">{foundProduct?.nome}</h2>
+                  <p className="text-xs text-muted-foreground">{foundProduct?.marca} · {foundProduct?.categoria}</p>
+                </>
+              ) : (
+                <h2 className="text-lg font-bold mt-1">Novo Produto</h2>
+              )}
             </div>
 
             <div className="space-y-3">
-              <div>
-                <Label>Data de Validade</Label>
-                <Input type="date" className="mt-1" />
-              </div>
-              <div>
-                <Label>Quantidade</Label>
-                <Input type="number" placeholder="0" className="mt-1" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Palete</Label>
-                  <Input placeholder="A" className="mt-1" />
-                </div>
-                <div>
-                  <Label>Prateleira</Label>
-                  <Input placeholder="A1" className="mt-1" />
-                </div>
-              </div>
-              <div>
-                <Label>Lote</Label>
-                <Input placeholder="Número do lote" className="mt-1" />
-              </div>
+              {step === "form-new" && (
+                <>
+                  <div><Label>Nome do Produto</Label><Input className="mt-1" value={nome} onChange={(e) => setNome(e.target.value)} required /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Categoria</Label><Input className="mt-1" value={categoria} onChange={(e) => setCategoria(e.target.value)} /></div>
+                    <div><Label>Marca</Label><Input className="mt-1" value={marca} onChange={(e) => setMarca(e.target.value)} /></div>
+                  </div>
+                </>
+              )}
+              <div><Label>Data de Validade</Label><Input type="date" className="mt-1" value={validade} onChange={(e) => setValidade(e.target.value)} required /></div>
+              <div><Label>Quantidade</Label><Input type="number" placeholder="0" className="mt-1" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} required /></div>
+              <div><Label>Lote</Label><Input placeholder="Número do lote" className="mt-1" value={lote} onChange={(e) => setLote(e.target.value)} /></div>
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => { setStep("scan"); setBarcode(""); }}>
-                Cancelar
-              </Button>
-              <Button className="flex-1" onClick={handleSave}>
-                Salvar
+              <Button variant="outline" className="flex-1" onClick={resetForm}>Cancelar</Button>
+              <Button className="flex-1" onClick={handleSave} disabled={loading || !validade || !quantidade}>
+                {loading ? "Salvando..." : "Salvar"}
               </Button>
             </div>
           </CardContent>

@@ -5,15 +5,55 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [nomeMercado, setNomeMercado] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [nomeGerente, setNomeGerente] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [endereco, setEndereco] = useState("");
   const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/dashboard");
+    setLoading(true);
+
+    try {
+      if (isRegister) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              nome: nomeGerente,
+              nome_mercado: nomeMercado,
+              cnpj,
+              cpf,
+              endereco,
+            },
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (error) throw error;
+        toast({ title: "Cadastro realizado!", description: "Verifique seu email para confirmar a conta." });
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        navigate("/dashboard");
+      }
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -31,16 +71,18 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-3">
             {isRegister && (
               <>
-                <div><Label>Nome do Mercado</Label><Input placeholder="Supermercado XYZ" className="mt-1" /></div>
-                <div><Label>CNPJ</Label><Input placeholder="00.000.000/0000-00" className="mt-1" /></div>
-                <div><Label>Nome do Gerente</Label><Input placeholder="Seu nome" className="mt-1" /></div>
+                <div><Label>Nome do Mercado</Label><Input placeholder="Supermercado XYZ" className="mt-1" value={nomeMercado} onChange={(e) => setNomeMercado(e.target.value)} required /></div>
+                <div><Label>CNPJ</Label><Input placeholder="00.000.000/0000-00" className="mt-1" value={cnpj} onChange={(e) => setCnpj(e.target.value)} required /></div>
+                <div><Label>Nome do Gerente</Label><Input placeholder="Seu nome" className="mt-1" value={nomeGerente} onChange={(e) => setNomeGerente(e.target.value)} required /></div>
+                <div><Label>CPF</Label><Input placeholder="000.000.000-00" className="mt-1" value={cpf} onChange={(e) => setCpf(e.target.value)} /></div>
+                <div><Label>Endereço</Label><Input placeholder="Rua, número, cidade" className="mt-1" value={endereco} onChange={(e) => setEndereco(e.target.value)} /></div>
               </>
             )}
             <div>
               <Label>Email</Label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="email@mercado.com" className="pl-9" type="email" />
+                <Input placeholder="email@mercado.com" className="pl-9" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
             </div>
             <div>
@@ -51,6 +93,10 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   className="pl-9 pr-10"
                   type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
                 />
                 <button
                   type="button"
@@ -62,8 +108,8 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full">
-              {isRegister ? "Cadastrar Empresa" : "Entrar"}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Aguarde..." : isRegister ? "Cadastrar Empresa" : "Entrar"}
             </Button>
           </form>
 
