@@ -14,16 +14,354 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cargos_hierarquia: {
+        Row: {
+          descricao: string | null
+          id: number
+          nivel_permissao: number
+          nome_cargo: string
+        }
+        Insert: {
+          descricao?: string | null
+          id?: number
+          nivel_permissao?: number
+          nome_cargo: string
+        }
+        Update: {
+          descricao?: string | null
+          id?: number
+          nivel_permissao?: number
+          nome_cargo?: string
+        }
+        Relationships: []
+      }
+      empresas: {
+        Row: {
+          cnpj: string
+          created_at: string
+          endereco: string | null
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      estoque: {
+        Row: {
+          created_at: string
+          data_entrada: string
+          data_validade: string
+          empresa_id: string
+          id: string
+          lote: string | null
+          palete_id: string | null
+          prateleira_id: string | null
+          produto_id: string
+          quantidade: number
+          registrado_por: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_entrada?: string
+          data_validade: string
+          empresa_id: string
+          id?: string
+          lote?: string | null
+          palete_id?: string | null
+          prateleira_id?: string | null
+          produto_id: string
+          quantidade?: number
+          registrado_por?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_entrada?: string
+          data_validade?: string
+          empresa_id?: string
+          id?: string
+          lote?: string | null
+          palete_id?: string | null
+          prateleira_id?: string | null
+          produto_id?: string
+          quantidade?: number
+          registrado_por?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_palete_id_fkey"
+            columns: ["palete_id"]
+            isOneToOne: false
+            referencedRelation: "paletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_prateleira_id_fkey"
+            columns: ["prateleira_id"]
+            isOneToOne: false
+            referencedRelation: "prateleiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funcionarios: {
+        Row: {
+          cargo: Database["public"]["Enums"]["app_role"]
+          cpf: string | null
+          created_at: string
+          empresa_id: string
+          id: string
+          matricula: string
+          nome: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cargo?: Database["public"]["Enums"]["app_role"]
+          cpf?: string | null
+          created_at?: string
+          empresa_id: string
+          id?: string
+          matricula: string
+          nome: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cargo?: Database["public"]["Enums"]["app_role"]
+          cpf?: string | null
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          matricula?: string
+          nome?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funcionarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notificacoes: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          estoque_id: string | null
+          id: string
+          lida: boolean
+          mensagem: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          estoque_id?: string | null
+          id?: string
+          lida?: boolean
+          mensagem: string
+          tipo: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          estoque_id?: string | null
+          id?: string
+          lida?: boolean
+          mensagem?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_estoque_id_fkey"
+            columns: ["estoque_id"]
+            isOneToOne: false
+            referencedRelation: "estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paletes: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          nome: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          nome: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paletes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prateleiras: {
+        Row: {
+          created_at: string
+          id: string
+          nome: string
+          palete_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nome: string
+          palete_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome?: string
+          palete_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prateleiras_palete_id_fkey"
+            columns: ["palete_id"]
+            isOneToOne: false
+            referencedRelation: "paletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      produtos: {
+        Row: {
+          categoria: string | null
+          codigo_barras: string | null
+          created_at: string
+          empresa_id: string
+          id: string
+          marca: string | null
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          categoria?: string | null
+          codigo_barras?: string | null
+          created_at?: string
+          empresa_id: string
+          id?: string
+          marca?: string | null
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          categoria?: string | null
+          codigo_barras?: string | null
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          marca?: string | null
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produtos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      gerar_matricula: { Args: never; Returns: string }
+      get_user_empresa_id: { Args: never; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "gerente" | "encarregado" | "repositor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +488,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["gerente", "encarregado", "repositor"],
+    },
   },
 } as const
