@@ -7,11 +7,14 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import LoginPage from "@/pages/LoginPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProductsPage from "@/pages/ProductsPage";
 import ScanPage from "@/pages/ScanPage";
 import PalletsPage from "@/pages/PalletsPage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
+import RHPage from "@/pages/RHPage";
+import AuditLogPage from "@/pages/AuditLogPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,11 +37,14 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/recuperar-senha" element={<ResetPasswordPage />} />
             <Route path="/dashboard" element={<LayoutRoute><DashboardPage /></LayoutRoute>} />
             <Route path="/produtos" element={<LayoutRoute><ProductsPage /></LayoutRoute>} />
             <Route path="/escanear" element={<LayoutRoute><ScanPage /></LayoutRoute>} />
             <Route path="/paletes" element={<LayoutRoute><PalletsPage /></LayoutRoute>} />
             <Route path="/funcionarios" element={<LayoutRoute><FuncionariosPage /></LayoutRoute>} />
+            <Route path="/rh" element={<LayoutRoute><RHPage /></LayoutRoute>} />
+            <Route path="/auditoria" element={<LayoutRoute><AuditLogPage /></LayoutRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

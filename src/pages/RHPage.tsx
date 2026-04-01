@@ -26,7 +26,7 @@ export default function RHPage() {
   const [cargo, setCargo] = useState<string>("repositor");
   const [generatedInfo, setGeneratedInfo] = useState<{ matricula: string; email: string } | null>(null);
 
-  const isRHOrGerente = funcionario?.cargo === "rh" || funcionario?.cargo === "gerente";
+  const isRHOrGerente = (funcionario?.cargo as string) === "rh" || funcionario?.cargo === "gerente";
 
   const { data: empresa } = useQuery({
     queryKey: ["empresa", funcionario?.empresa_id],
