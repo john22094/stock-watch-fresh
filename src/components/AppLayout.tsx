@@ -62,8 +62,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const { funcionario, signOut, user } = useAuth();
 
   const isGerente = funcionario?.cargo === "gerente";
+  const isRH = (funcionario?.cargo as string) === "rh";
 
-  const allNavItems = isGerente ? [...navItems, ...gerenteNavItems] : navItems;
+  let allNavItems = [...navItems];
+  if (isGerente) allNavItems = [...allNavItems, ...gerenteNavItems, ...rhNavItems];
+  else if (isRH) allNavItems = [...allNavItems, ...rhNavItems];
 
   const { data: alertCount = 0 } = useQuery({
     queryKey: ["notificacoes-count", funcionario?.empresa_id],
