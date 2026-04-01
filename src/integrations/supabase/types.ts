@@ -136,15 +136,55 @@ export type Database = {
           },
         ]
       }
+      estoque_log: {
+        Row: {
+          acao: string
+          created_at: string
+          detalhes: Json | null
+          estoque_id: string | null
+          funcionario_id: string | null
+          id: string
+          matricula: string | null
+        }
+        Insert: {
+          acao: string
+          created_at?: string
+          detalhes?: Json | null
+          estoque_id?: string | null
+          funcionario_id?: string | null
+          id?: string
+          matricula?: string | null
+        }
+        Update: {
+          acao?: string
+          created_at?: string
+          detalhes?: Json | null
+          estoque_id?: string | null
+          funcionario_id?: string | null
+          id?: string
+          matricula?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_log_estoque_id_fkey"
+            columns: ["estoque_id"]
+            isOneToOne: false
+            referencedRelation: "estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funcionarios: {
         Row: {
           cargo: Database["public"]["Enums"]["app_role"]
           cpf: string | null
           created_at: string
+          data_nascimento: string | null
           empresa_id: string
           id: string
           matricula: string
           nome: string
+          sobrenome: string | null
           status: string
           updated_at: string
           user_id: string
@@ -153,10 +193,12 @@ export type Database = {
           cargo?: Database["public"]["Enums"]["app_role"]
           cpf?: string | null
           created_at?: string
+          data_nascimento?: string | null
           empresa_id: string
           id?: string
           matricula: string
           nome: string
+          sobrenome?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -165,10 +207,12 @@ export type Database = {
           cargo?: Database["public"]["Enums"]["app_role"]
           cpf?: string | null
           created_at?: string
+          data_nascimento?: string | null
           empresa_id?: string
           id?: string
           matricula?: string
           nome?: string
+          sobrenome?: string | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -350,6 +394,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      criar_funcionario_rh: {
+        Args: {
+          p_cargo: Database["public"]["Enums"]["app_role"]
+          p_cpf: string
+          p_data_nascimento: string
+          p_empresa_id: string
+          p_nome: string
+          p_nome_mercado: string
+          p_sobrenome: string
+        }
+        Returns: {
+          email_corporativo: string
+          matricula: string
+        }[]
+      }
       gerar_matricula: { Args: never; Returns: string }
       get_user_empresa_id: { Args: never; Returns: string }
       has_role: {
@@ -358,6 +417,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      verificar_reset_senha: {
+        Args: { p_cpf: string; p_email: string; p_matricula: string }
+        Returns: string
       }
     }
     Enums: {
