@@ -10,6 +10,8 @@ import {
   LogOut,
   User,
   Users,
+  ClipboardList,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -29,6 +31,11 @@ const navItems = [
 
 const gerenteNavItems = [
   { path: "/funcionarios", label: "Funcionários", icon: Users },
+  { path: "/auditoria", label: "Auditoria", icon: FileText },
+];
+
+const rhNavItems = [
+  { path: "/rh", label: "RH", icon: ClipboardList },
 ];
 
 function NavItem({ path, label, icon: Icon, active }: { path: string; label: string; icon: any; active: boolean }) {
@@ -55,8 +62,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const { funcionario, signOut, user } = useAuth();
 
   const isGerente = funcionario?.cargo === "gerente";
+  const isRH = (funcionario?.cargo as string) === "rh";
 
-  const allNavItems = isGerente ? [...navItems, ...gerenteNavItems] : navItems;
+  let allNavItems = [...navItems];
+  if (isGerente) allNavItems = [...allNavItems, ...gerenteNavItems, ...rhNavItems];
+  else if (isRH) allNavItems = [...allNavItems, ...rhNavItems];
 
   const { data: alertCount = 0 } = useQuery({
     queryKey: ["notificacoes-count", funcionario?.empresa_id],

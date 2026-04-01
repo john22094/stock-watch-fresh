@@ -113,13 +113,20 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="text-center">
+          <div className="text-center space-y-2">
             <button
               onClick={() => setIsRegister(!isRegister)}
               className="text-sm text-primary hover:underline"
             >
               {isRegister ? "Já tenho uma conta" : "Cadastrar nova empresa"}
             </button>
+            {!isRegister && (
+              <div>
+                <a href="/recuperar-senha" className="text-sm text-muted-foreground hover:underline">
+                  Esqueci minha senha
+                </a>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
