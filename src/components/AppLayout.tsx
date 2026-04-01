@@ -31,6 +31,11 @@ const navItems = [
 
 const gerenteNavItems = [
   { path: "/funcionarios", label: "Funcionários", icon: Users },
+  { path: "/auditoria", label: "Auditoria", icon: FileText },
+];
+
+const rhNavItems = [
+  { path: "/rh", label: "RH", icon: ClipboardList },
 ];
 
 function NavItem({ path, label, icon: Icon, active }: { path: string; label: string; icon: any; active: boolean }) {
