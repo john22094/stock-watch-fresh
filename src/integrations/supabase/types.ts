@@ -418,6 +418,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_rh: { Args: { _user_id: string }; Returns: boolean }
       verificar_reset_senha: {
         Args: { p_cpf: string; p_email: string; p_matricula: string }
         Returns: string
