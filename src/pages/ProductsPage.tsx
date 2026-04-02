@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Pencil, Check, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { differenceInDays, parseISO } from "date-fns";
+import { cn } from "@/lib/utils";
 
 function StatusBadge({ days }: { days: number }) {
   if (days <= 0) return <Badge className="status-danger text-[10px]">Vencido</Badge>;
@@ -21,15 +22,22 @@ function StatusBadge({ days }: { days: number }) {
   return <Badge className="status-safe text-[10px]">OK</Badge>;
 }
 
+function rowClass(days: number) {
+  if (days <= 0) return "bg-[hsl(var(--status-danger)/0.08)]";
+  if (days <= 7) return "bg-[hsl(var(--status-warning)/0.08)]";
+  return "";
+}
+
 export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editQty, setEditQty] = useState("");
   const { funcionario } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const empresaId = funcionario?.empresa_id;
 
-  // Form state
   const [nome, setNome] = useState("");
   const [codigoBarras, setCodigoBarras] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -38,7 +46,10 @@ export default function ProductsPage() {
   const [quantidade, setQuantidade] = useState("");
   const [lote, setLote] = useState("");
 
-  const canAdd = funcionario?.cargo === "gerente" || funcionario?.cargo === "encarregado";
+  const cargo = funcionario?.cargo as string;
+  const canAdd = cargo === "gerente" || cargo === "encarregado";
+  const canEditAll = cargo === "gerente" || cargo === "encarregado";
+  const canEditQty = true; // all roles can edit quantity
 
   const { data: estoqueItems = [], isLoading } = useQuery({
     queryKey: ["produtos-estoque", empresaId],
@@ -65,33 +76,39 @@ export default function ProductsPage() {
     palNome: (item.paletes as any)?.nome ?? "-",
   }));
 
-  const filtered = withDays.filter(
-    (p) =>
-      p.prodNome.toLowerCase().includes(search.toLowerCase()) ||
-      p.prodCodigo.includes(search) ||
-      p.prodCategoria.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = withDays
+    .filter(
+      (p) =>
+        p.prodNome.toLowerCase().includes(search.toLowerCase()) ||
+        p.prodCodigo.includes(search) ||
+        p.prodCategoria.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => a.days - b.days);
+
+  const updateQty = useMutation({
+    mutationFn: async ({ id, qty }: { id: string; qty: number }) => {
+      const { error } = await supabase.from("estoque").update({ quantidade: qty }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["produtos-estoque"] });
+      setEditingId(null);
+      toast({ title: "Quantidade atualizada!" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
 
   const addProduct = useMutation({
     mutationFn: async () => {
-      // Create product first
       const { data: prod, error: prodErr } = await supabase
         .from("produtos")
         .insert({ nome, codigo_barras: codigoBarras || null, categoria: categoria || null, marca: marca || null, empresa_id: empresaId! })
         .select("id")
         .single();
       if (prodErr) throw prodErr;
-
-      // Create estoque entry
       const { error: estErr } = await supabase
         .from("estoque")
-        .insert({
-          produto_id: prod.id,
-          data_validade: validade,
-          quantidade: parseInt(quantidade) || 0,
-          lote: lote || null,
-          empresa_id: empresaId!,
-        });
+        .insert({ produto_id: prod.id, data_validade: validade, quantidade: parseInt(quantidade) || 0, lote: lote || null, empresa_id: empresaId! });
       if (estErr) throw estErr;
     },
     onSuccess: () => {
@@ -103,12 +120,19 @@ export default function ProductsPage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  const alertCount = withDays.filter(p => p.days <= 7 && p.days > 0).length;
+  const expiredCount = withDays.filter(p => p.days <= 0).length;
+
   return (
     <div className="space-y-4 pb-20 md:pb-0">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Produtos</h1>
-          <p className="text-sm text-muted-foreground">{withDays.length} itens no estoque</p>
+          <h1 className="text-2xl font-bold">Inventário de Produtos</h1>
+          <p className="text-sm text-muted-foreground">
+            {withDays.length} itens · {expiredCount > 0 && <span className="text-[hsl(var(--status-danger))] font-semibold">{expiredCount} vencidos</span>}
+            {expiredCount > 0 && alertCount > 0 && " · "}
+            {alertCount > 0 && <span className="text-[hsl(var(--status-warning))] font-semibold">{alertCount} vencendo em 7 dias</span>}
+          </p>
         </div>
         {canAdd && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -147,6 +171,7 @@ export default function ProductsPage() {
         <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
       ) : (
         <>
+          {/* Desktop table */}
           <div className="hidden md:block">
             <Card>
               <CardContent className="p-0">
@@ -158,27 +183,61 @@ export default function ProductsPage() {
                       <th className="px-4 py-2.5 font-medium">Categoria</th>
                       <th className="px-4 py-2.5 font-medium">Qtd</th>
                       <th className="px-4 py-2.5 font-medium">Local</th>
+                      <th className="px-4 py-2.5 font-medium">Entrada</th>
                       <th className="px-4 py-2.5 font-medium">Validade</th>
+                      <th className="px-4 py-2.5 font-medium">Dias p/ Vencer</th>
                       <th className="px-4 py-2.5 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((p) => (
-                      <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <tr key={p.id} className={cn("border-b last:border-0 hover:bg-muted/50 transition-colors", rowClass(p.days))}>
                         <td className="px-4 py-3">
                           <div><span className="font-medium">{p.prodNome}</span></div>
                           <div className="text-[11px] text-muted-foreground">{p.prodMarca}</div>
                         </td>
                         <td className="px-4 py-3 font-mono text-xs">{p.prodCodigo}</td>
                         <td className="px-4 py-3">{p.prodCategoria}</td>
-                        <td className="px-4 py-3 font-bold">{p.quantidade}</td>
+                        <td className="px-4 py-3">
+                          {editingId === p.id ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                className="w-16 h-7 text-xs"
+                                value={editQty}
+                                onChange={(e) => setEditQty(e.target.value)}
+                                autoFocus
+                              />
+                              <button onClick={() => updateQty.mutate({ id: p.id, qty: parseInt(editQty) || 0 })} className="text-[hsl(var(--status-safe))] hover:opacity-80"><Check className="h-4 w-4" /></button>
+                              <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:opacity-80"><X className="h-4 w-4" /></button>
+                            </div>
+                          ) : (
+                            <span
+                              className={cn("font-bold", canEditQty && "cursor-pointer hover:underline")}
+                              onClick={() => { if (canEditQty) { setEditingId(p.id); setEditQty(String(p.quantidade)); } }}
+                            >
+                              {p.quantidade}
+                              {canEditQty && <Pencil className="inline ml-1 h-3 w-3 text-muted-foreground" />}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 font-mono text-xs">{p.palNome}/{p.pratNome}</td>
+                        <td className="px-4 py-3 text-xs">{new Date(p.data_entrada).toLocaleDateString("pt-BR")}</td>
                         <td className="px-4 py-3">{new Date(p.data_validade).toLocaleDateString("pt-BR")}</td>
+                        <td className="px-4 py-3 font-bold tabular-nums">
+                          {p.days <= 0 ? (
+                            <span className="text-[hsl(var(--status-danger))]">{p.days}d</span>
+                          ) : p.days <= 7 ? (
+                            <span className="text-[hsl(var(--status-warning))]">{p.days}d</span>
+                          ) : (
+                            <span>{p.days}d</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3"><StatusBadge days={p.days} /></td>
                       </tr>
                     ))}
                     {filtered.length === 0 && (
-                      <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">Nenhum produto encontrado</td></tr>
+                      <tr><td colSpan={9} className="px-4 py-6 text-center text-muted-foreground">Nenhum produto encontrado</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -186,9 +245,10 @@ export default function ProductsPage() {
             </Card>
           </div>
 
+          {/* Mobile cards */}
           <div className="md:hidden space-y-2">
             {filtered.map((p) => (
-              <Card key={p.id}>
+              <Card key={p.id} className={cn(rowClass(p.days))}>
                 <CardContent className="p-3">
                   <div className="flex items-start justify-between">
                     <div>
@@ -199,9 +259,27 @@ export default function ProductsPage() {
                   </div>
                   <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                     <span className="font-mono">{p.palNome}/{p.pratNome}</span>
-                    <span>Qtd: {p.quantidade}</span>
-                    <span>Val: {new Date(p.data_validade).toLocaleDateString("pt-BR")}</span>
+                    <span
+                      className={cn("cursor-pointer", canEditQty && "underline")}
+                      onClick={() => { if (canEditQty) { setEditingId(p.id); setEditQty(String(p.quantidade)); } }}
+                    >
+                      Qtd: {p.quantidade}
+                    </span>
+                    <span className={cn("font-bold", p.days <= 0 ? "text-[hsl(var(--status-danger))]" : p.days <= 7 ? "text-[hsl(var(--status-warning))]" : "")}>
+                      {p.days}d
+                    </span>
                   </div>
+                  {editingId === p.id && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <Input type="number" className="w-20 h-7 text-xs" value={editQty} onChange={(e) => setEditQty(e.target.value)} autoFocus />
+                      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => updateQty.mutate({ id: p.id, qty: parseInt(editQty) || 0 })}>
+                        <Check className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingId(null)}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
