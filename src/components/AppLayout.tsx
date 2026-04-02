@@ -148,6 +148,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 {sidebar}
               </SheetContent>
             </Sheet>
+            {location.pathname !== "/dashboard" && (
+              <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="gap-1 text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </Button>
+            )}
             <h2 className="text-lg font-semibold">
               {allNavItems.find((n) => n.path === location.pathname)?.label ?? "ValidaHub"}
             </h2>
