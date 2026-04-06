@@ -13,6 +13,7 @@ interface Funcionario {
   status: string;
   empresa_id: string;
   cpf: string | null;
+  deve_trocar_senha: boolean;
 }
 
 interface AuthContextType {
