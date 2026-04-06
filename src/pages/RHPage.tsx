@@ -10,20 +10,28 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, ClipboardList, Users } from "lucide-react";
+import { UserPlus, ClipboardList, Pencil } from "lucide-react";
+
+const SETORES = [
+  "Frutas", "Verduras", "Açougue/Peixaria", "Padaria/Confeitaria",
+  "Frios e Laticínios", "Mercearia", "Bebidas (Adega)",
+  "Limpeza e Higiene/Beleza", "Bazar", "Pet Shop", "Eletrodomésticos",
+];
 
 export default function RHPage() {
   const { funcionario } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialog, setEditDialog] = useState<any>(null);
 
-  // Form state
   const [nome, setNome] = useState("");
   const [sobrenome, setSobrenome] = useState("");
   const [cpf, setCpf] = useState("");
   const [dataNascimento, setDataNascimento] = useState("");
   const [cargo, setCargo] = useState<string>("repositor");
+  const [setor, setSetor] = useState("");
+  const [cbo, setCbo] = useState("");
   const [generatedInfo, setGeneratedInfo] = useState<{ matricula: string; email: string } | null>(null);
 
   const isRHOrGerente = (funcionario?.cargo as string) === "rh" || funcionario?.cargo === "gerente";
@@ -31,11 +39,7 @@ export default function RHPage() {
   const { data: empresa } = useQuery({
     queryKey: ["empresa", funcionario?.empresa_id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("empresas")
-        .select("nome")
-        .eq("id", funcionario!.empresa_id)
-        .single();
+      const { data } = await supabase.from("empresas").select("nome").eq("id", funcionario!.empresa_id).single();
       return data;
     },
     enabled: !!funcionario?.empresa_id,
@@ -58,13 +62,9 @@ export default function RHPage() {
   const gerarDados = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.rpc("criar_funcionario_rh", {
-        p_nome: nome,
-        p_sobrenome: sobrenome,
-        p_cpf: cpf,
-        p_data_nascimento: dataNascimento,
-        p_cargo: cargo as any,
-        p_empresa_id: funcionario!.empresa_id,
-        p_nome_mercado: empresa?.nome ?? "mercado",
+        p_nome: nome, p_sobrenome: sobrenome, p_cpf: cpf,
+        p_data_nascimento: dataNascimento, p_cargo: cargo as any,
+        p_empresa_id: funcionario!.empresa_id, p_nome_mercado: empresa?.nome ?? "mercado",
       });
       if (error) throw error;
       return data[0] as { matricula: string; email_corporativo: string };
@@ -79,23 +79,12 @@ export default function RHPage() {
   const criarConta = useMutation({
     mutationFn: async () => {
       if (!generatedInfo) throw new Error("Gere os dados primeiro");
-      
       const { error } = await supabase.auth.signUp({
         email: generatedInfo.email,
         password: `VH-${cpf.replace(/\D/g, "").slice(0, 6)}`,
-        options: {
-          data: {
-            nome: `${nome} ${sobrenome}`,
-            nome_mercado: empresa?.nome,
-            cpf,
-          },
-        },
+        options: { data: { nome: `${nome} ${sobrenome}`, nome_mercado: empresa?.nome, cpf, cargo, setor, cbo } },
       });
       if (error) throw error;
-
-      // Note: the handle_new_user trigger will create a new empresa
-      // For RH flow, we'd ideally update the employee to the correct empresa
-      // This is a simplified version
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rh-funcionarios"] });
@@ -106,27 +95,28 @@ export default function RHPage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  const updateFunc = useMutation({
+    mutationFn: async ({ id, cargo, setor, cbo }: { id: string; cargo: string; setor: string; cbo: string }) => {
+      const { error } = await supabase.from("funcionarios").update({ cargo: cargo as any, setor, cbo }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rh-funcionarios"] });
+      toast({ title: "Funcionário atualizado!" });
+      setEditDialog(null);
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
   const resetForm = () => {
-    setNome("");
-    setSobrenome("");
-    setCpf("");
-    setDataNascimento("");
-    setCargo("repositor");
-    setGeneratedInfo(null);
+    setNome(""); setSobrenome(""); setCpf(""); setDataNascimento("");
+    setCargo("repositor"); setSetor(""); setCbo(""); setGeneratedInfo(null);
   };
 
-  const statusColors: Record<string, string> = {
-    ativo: "status-safe",
-    pendente: "status-warning",
-    inativo: "status-danger",
-  };
+  const statusColors: Record<string, string> = { ativo: "status-safe", pendente: "status-warning", inativo: "status-danger" };
 
   if (!isRHOrGerente) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <p className="text-muted-foreground">Acesso restrito ao RH e Gerente.</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center min-h-[50vh]"><p className="text-muted-foreground">Acesso restrito ao RH e Gerente.</p></div>;
   }
 
   return (
@@ -143,7 +133,7 @@ export default function RHPage() {
           <DialogTrigger asChild>
             <Button size="sm"><UserPlus className="h-4 w-4 mr-1" /> Novo Funcionário</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Cadastrar Funcionário</DialogTitle></DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); if (!generatedInfo) gerarDados.mutate(); else criarConta.mutate(); }} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -164,6 +154,16 @@ export default function RHPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Setor / Departamento</Label>
+                <Select value={setor} onValueChange={setSetor} disabled={!!generatedInfo}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                  <SelectContent>
+                    {SETORES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>CBO (Código Brasileiro de Ocupações)</Label><Input placeholder="Ex: 5211-10" value={cbo} onChange={(e) => setCbo(e.target.value)} disabled={!!generatedInfo} /></div>
 
               {generatedInfo && (
                 <Card className="border-primary/30 bg-primary/5">
@@ -184,6 +184,40 @@ export default function RHPage() {
         </Dialog>
       </div>
 
+      {/* Edit dialog */}
+      <Dialog open={!!editDialog} onOpenChange={(open) => { if (!open) setEditDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Editar Funcionário</DialogTitle></DialogHeader>
+          {editDialog && (
+            <form onSubmit={(e) => { e.preventDefault(); updateFunc.mutate({ id: editDialog.id, cargo: editDialog.cargo, setor: editDialog.setor || "", cbo: editDialog.cbo || "" }); }} className="space-y-3">
+              <div><Label>Nome</Label><Input value={`${editDialog.nome} ${editDialog.sobrenome || ""}`} disabled /></div>
+              <div><Label>Matrícula</Label><Input value={editDialog.matricula} disabled /></div>
+              <div>
+                <Label>Cargo</Label>
+                <Select value={editDialog.cargo} onValueChange={(v) => setEditDialog({ ...editDialog, cargo: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="repositor">Repositor</SelectItem>
+                    <SelectItem value="encarregado">Encarregado</SelectItem>
+                    <SelectItem value="rh">RH</SelectItem>
+                    <SelectItem value="gerente">Gerente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Setor</Label>
+                <Select value={editDialog.setor || ""} onValueChange={(v) => setEditDialog({ ...editDialog, setor: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{SETORES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>CBO</Label><Input value={editDialog.cbo || ""} onChange={(e) => setEditDialog({ ...editDialog, cbo: e.target.value })} placeholder="Ex: 5211-10" /></div>
+              <Button type="submit" className="w-full" disabled={updateFunc.isPending}>Salvar Alterações</Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="p-4 text-center">
@@ -202,27 +236,25 @@ export default function RHPage() {
 
       {/* Employee list */}
       {isLoading ? (
-        <div className="flex justify-center py-10">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
+        <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
       ) : (
         <div className="space-y-2">
-          {funcionarios.map((f) => (
+          {funcionarios.map((f: any) => (
             <Card key={f.id}>
               <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                 <div>
                   <p className="font-semibold">{f.nome} {f.sobrenome}</p>
                   <p className="text-xs text-muted-foreground font-mono">Matrícula: {f.matricula}</p>
                   {f.cpf && <p className="text-xs text-muted-foreground">CPF: {f.cpf}</p>}
-                  {f.data_nascimento && (
-                    <p className="text-xs text-muted-foreground">
-                      Nascimento: {new Date(f.data_nascimento).toLocaleDateString("pt-BR")}
-                    </p>
-                  )}
+                  {f.setor && <p className="text-xs text-muted-foreground">Setor: {f.setor}</p>}
+                  {f.cbo && <p className="text-xs text-muted-foreground">CBO: {f.cbo}</p>}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <Badge className={statusColors[f.status] + " text-[10px]"}>{f.status}</Badge>
                   <Badge variant="outline" className="text-[10px]">{f.cargo}</Badge>
+                  <Button variant="ghost" size="sm" onClick={() => setEditDialog({ ...f })}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
