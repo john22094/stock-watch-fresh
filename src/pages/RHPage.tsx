@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,13 +10,20 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, ClipboardList, Pencil } from "lucide-react";
+import { UserPlus, ClipboardList, Pencil, Copy } from "lucide-react";
 
 const SETORES = [
   "Frutas", "Verduras", "Açougue/Peixaria", "Padaria/Confeitaria",
   "Frios e Laticínios", "Mercearia", "Bebidas (Adega)",
   "Limpeza e Higiene/Beleza", "Bazar", "Pet Shop", "Eletrodomésticos",
 ];
+
+function generatePassword(sobrenome: string, cpf: string): string {
+  const cleanCpf = cpf.replace(/\D/g, "");
+  const last5 = cleanCpf.slice(-5);
+  const lastName = sobrenome.trim().split(" ").pop() || sobrenome;
+  return `${lastName}!${last5}`;
+}
 
 export default function RHPage() {
   const { funcionario } = useAuth();
@@ -30,9 +37,9 @@ export default function RHPage() {
   const [cpf, setCpf] = useState("");
   const [dataNascimento, setDataNascimento] = useState("");
   const [cargo, setCargo] = useState<string>("repositor");
-  const [setor, setSetor] = useState("");
   const [cbo, setCbo] = useState("");
-  const [generatedInfo, setGeneratedInfo] = useState<{ matricula: string; email: string } | null>(null);
+  const [email, setEmail] = useState("");
+  const [generatedInfo, setGeneratedInfo] = useState<{ matricula: string; email: string; senha: string } | null>(null);
 
   const isRHOrGerente = (funcionario?.cargo as string) === "rh" || funcionario?.cargo === "gerente";
 
@@ -67,10 +74,12 @@ export default function RHPage() {
         p_empresa_id: funcionario!.empresa_id, p_nome_mercado: empresa?.nome ?? "mercado",
       });
       if (error) throw error;
-      return data[0] as { matricula: string; email_corporativo: string };
+      const result = data[0] as { matricula: string; email_corporativo: string };
+      const senha = generatePassword(sobrenome, cpf);
+      return { matricula: result.matricula, email: email || result.email_corporativo, senha };
     },
     onSuccess: (data) => {
-      setGeneratedInfo({ matricula: data.matricula, email: data.email_corporativo });
+      setGeneratedInfo(data);
       toast({ title: "Dados gerados!", description: `Matrícula: ${data.matricula}` });
     },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
@@ -81,14 +90,23 @@ export default function RHPage() {
       if (!generatedInfo) throw new Error("Gere os dados primeiro");
       const { error } = await supabase.auth.signUp({
         email: generatedInfo.email,
-        password: `VH-${cpf.replace(/\D/g, "").slice(0, 6)}`,
-        options: { data: { nome: `${nome} ${sobrenome}`, nome_mercado: empresa?.nome, cpf, cargo, setor, cbo } },
+        password: generatedInfo.senha,
+        options: {
+          data: {
+            nome: `${nome} ${sobrenome}`,
+            nome_mercado: empresa?.nome,
+            cpf,
+            cargo,
+            cbo,
+            deve_trocar_senha: true,
+          },
+        },
       });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rh-funcionarios"] });
-      toast({ title: "Funcionário cadastrado com sucesso!" });
+      toast({ title: "Funcionário cadastrado com sucesso!", description: "A senha provisória foi gerada. O funcionário deverá alterá-la no primeiro login." });
       setDialogOpen(false);
       resetForm();
     },
@@ -110,7 +128,12 @@ export default function RHPage() {
 
   const resetForm = () => {
     setNome(""); setSobrenome(""); setCpf(""); setDataNascimento("");
-    setCargo("repositor"); setSetor(""); setCbo(""); setGeneratedInfo(null);
+    setCargo("repositor"); setCbo(""); setEmail(""); setGeneratedInfo(null);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado!" });
   };
 
   const statusColors: Record<string, string> = { ativo: "status-safe", pendente: "status-warning", inativo: "status-danger" };
@@ -154,24 +177,26 @@ export default function RHPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Setor / Departamento</Label>
-                <Select value={setor} onValueChange={setSetor} disabled={!!generatedInfo}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
-                  <SelectContent>
-                    {SETORES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
               <div><Label>CBO (Código Brasileiro de Ocupações)</Label><Input placeholder="Ex: 5211-10" value={cbo} onChange={(e) => setCbo(e.target.value)} disabled={!!generatedInfo} /></div>
+              <div><Label>Email (login do funcionário)</Label><Input type="email" placeholder="funcionario@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={!!generatedInfo} /></div>
 
               {generatedInfo && (
                 <Card className="border-primary/30 bg-primary/5">
-                  <CardContent className="p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">Dados gerados:</p>
-                    <p className="text-sm font-mono font-bold">Matrícula: {generatedInfo.matricula}</p>
-                    <p className="text-sm font-mono">Email: {generatedInfo.email}</p>
-                    <p className="text-xs text-muted-foreground">Senha provisória: VH-{cpf.replace(/\D/g, "").slice(0, 6)}</p>
+                  <CardContent className="p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground font-semibold">Dados gerados — compartilhe com o funcionário:</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-mono font-bold">Matrícula: {generatedInfo.matricula}</p>
+                      <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => copyToClipboard(generatedInfo.matricula)}><Copy className="h-3 w-3" /></Button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-mono">Email: {generatedInfo.email}</p>
+                      <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => copyToClipboard(generatedInfo.email)}><Copy className="h-3 w-3" /></Button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-mono">Senha: {generatedInfo.senha}</p>
+                      <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => copyToClipboard(generatedInfo.senha)}><Copy className="h-3 w-3" /></Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">O funcionário será solicitado a alterar a senha no primeiro login.</p>
                   </CardContent>
                 </Card>
               )}

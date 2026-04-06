@@ -11,7 +11,7 @@ import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProductsPage from "@/pages/ProductsPage";
 import ScanPage from "@/pages/ScanPage";
-import PalletsPage from "@/pages/PalletsPage";
+import EstoquePage from "@/pages/EstoquePage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
 import RHPage from "@/pages/RHPage";
 import AuditLogPage from "@/pages/AuditLogPage";
@@ -41,7 +41,7 @@ const App = () => (
             <Route path="/dashboard" element={<LayoutRoute><DashboardPage /></LayoutRoute>} />
             <Route path="/produtos" element={<LayoutRoute><ProductsPage /></LayoutRoute>} />
             <Route path="/escanear" element={<LayoutRoute><ScanPage /></LayoutRoute>} />
-            <Route path="/paletes" element={<LayoutRoute><PalletsPage /></LayoutRoute>} />
+            <Route path="/estoque" element={<LayoutRoute><EstoquePage /></LayoutRoute>} />
             <Route path="/funcionarios" element={<LayoutRoute><FuncionariosPage /></LayoutRoute>} />
             <Route path="/rh" element={<LayoutRoute><RHPage /></LayoutRoute>} />
             <Route path="/auditoria" element={<LayoutRoute><AuditLogPage /></LayoutRoute>} />
