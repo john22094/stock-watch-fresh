@@ -11,7 +11,7 @@ import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProductsPage from "@/pages/ProductsPage";
 import ScanPage from "@/pages/ScanPage";
-import PalletsPage from "@/pages/PalletsPage";
+import EstoquePage from "@/pages/EstoquePage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
 import RHPage from "@/pages/RHPage";
 import AuditLogPage from "@/pages/AuditLogPage";
