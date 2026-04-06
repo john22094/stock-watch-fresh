@@ -177,6 +177,7 @@ export type Database = {
       funcionarios: {
         Row: {
           cargo: Database["public"]["Enums"]["app_role"]
+          cbo: string | null
           cpf: string | null
           created_at: string
           data_nascimento: string | null
@@ -184,6 +185,7 @@ export type Database = {
           id: string
           matricula: string
           nome: string
+          setor: string | null
           sobrenome: string | null
           status: string
           updated_at: string
@@ -191,6 +193,7 @@ export type Database = {
         }
         Insert: {
           cargo?: Database["public"]["Enums"]["app_role"]
+          cbo?: string | null
           cpf?: string | null
           created_at?: string
           data_nascimento?: string | null
@@ -198,6 +201,7 @@ export type Database = {
           id?: string
           matricula: string
           nome: string
+          setor?: string | null
           sobrenome?: string | null
           status?: string
           updated_at?: string
@@ -205,6 +209,7 @@ export type Database = {
         }
         Update: {
           cargo?: Database["public"]["Enums"]["app_role"]
+          cbo?: string | null
           cpf?: string | null
           created_at?: string
           data_nascimento?: string | null
@@ -212,6 +217,7 @@ export type Database = {
           id?: string
           matricula?: string
           nome?: string
+          setor?: string | null
           sobrenome?: string | null
           status?: string
           updated_at?: string
