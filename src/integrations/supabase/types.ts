@@ -71,6 +71,7 @@ export type Database = {
           id: string
           lote: string | null
           palete_id: string | null
+          peso: number | null
           prateleira_id: string | null
           produto_id: string
           quantidade: number
@@ -85,6 +86,7 @@ export type Database = {
           id?: string
           lote?: string | null
           palete_id?: string | null
+          peso?: number | null
           prateleira_id?: string | null
           produto_id: string
           quantidade?: number
@@ -99,6 +101,7 @@ export type Database = {
           id?: string
           lote?: string | null
           palete_id?: string | null
+          peso?: number | null
           prateleira_id?: string | null
           produto_id?: string
           quantidade?: number
@@ -181,6 +184,7 @@ export type Database = {
           cpf: string | null
           created_at: string
           data_nascimento: string | null
+          deve_trocar_senha: boolean
           empresa_id: string
           id: string
           matricula: string
@@ -197,6 +201,7 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           data_nascimento?: string | null
+          deve_trocar_senha?: boolean
           empresa_id: string
           id?: string
           matricula: string
@@ -213,6 +218,7 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           data_nascimento?: string | null
+          deve_trocar_senha?: boolean
           empresa_id?: string
           id?: string
           matricula?: string
@@ -341,6 +347,7 @@ export type Database = {
           categoria: string | null
           codigo_barras: string | null
           created_at: string
+          descricao: string | null
           empresa_id: string
           id: string
           marca: string | null
@@ -351,6 +358,7 @@ export type Database = {
           categoria?: string | null
           codigo_barras?: string | null
           created_at?: string
+          descricao?: string | null
           empresa_id: string
           id?: string
           marca?: string | null
@@ -361,6 +369,7 @@ export type Database = {
           categoria?: string | null
           codigo_barras?: string | null
           created_at?: string
+          descricao?: string | null
           empresa_id?: string
           id?: string
           marca?: string | null
