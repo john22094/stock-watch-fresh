@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchFuncionario = async (userId: string) => {
     const { data } = await supabase
       .from("funcionarios")
-      .select("id, nome, matricula, cargo, status, empresa_id, cpf")
+      .select("id, nome, matricula, cargo, status, empresa_id, cpf, deve_trocar_senha")
       .eq("user_id", userId)
       .single();
     setFuncionario(data as Funcionario | null);
