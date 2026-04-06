@@ -27,7 +27,7 @@ const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/produtos", label: "Produtos", icon: Package },
   { path: "/escanear", label: "Escanear", icon: ScanBarcode },
-  { path: "/paletes", label: "Paletes", icon: Warehouse },
+  { path: "/estoque", label: "Estoque", icon: Warehouse },
 ];
 
 const gerenteNavItems = [

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Package, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,54 +7,105 @@ import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [nomeMercado, setNomeMercado] = useState("");
-  const [cnpj, setCnpj] = useState("");
-  const [nomeGerente, setNomeGerente] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [endereco, setEndereco] = useState("");
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { funcionario, session } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Check if user must change password after login
+  useEffect(() => {
+    if (session && funcionario?.deve_trocar_senha) {
+      setMustChangePassword(true);
+    } else if (session && funcionario && !funcionario.deve_trocar_senha) {
+      navigate("/dashboard");
+    }
+  }, [session, funcionario, navigate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      if (isRegister) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              nome: nomeGerente,
-              nome_mercado: nomeMercado,
-              cnpj,
-              cpf,
-              endereco,
-            },
-            emailRedirectTo: window.location.origin,
-          },
-        });
-        if (error) throw error;
-        toast({ title: "Cadastro realizado!", description: "Verifique seu email para confirmar a conta." });
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        navigate("/dashboard");
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // Auth state change will trigger the useEffect above
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" });
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast({ title: "Erro", description: "A senha deve ter no mínimo 6 caracteres.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+      if (authError) throw authError;
+
+      // Update flag in funcionarios
+      const { error: dbError } = await supabase
+        .from("funcionarios")
+        .update({ deve_trocar_senha: false } as any)
+        .eq("id", funcionario!.id);
+      if (dbError) throw dbError;
+
+      toast({ title: "Senha alterada com sucesso!" });
+      setMustChangePassword(false);
+      navigate("/dashboard");
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (mustChangePassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-sm">
+          <CardContent className="p-6 space-y-6">
+            <div className="text-center">
+              <div className="mx-auto w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-3">
+                <Lock className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <h1 className="text-xl font-bold">Alterar Senha</h1>
+              <p className="text-sm text-muted-foreground">Por segurança, defina uma nova senha para continuar.</p>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <Label>Nova Senha</Label>
+                <Input type="password" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} />
+              </div>
+              <div>
+                <Label>Confirmar Nova Senha</Label>
+                <Input type="password" placeholder="Repita a senha" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Salvando..." : "Salvar Nova Senha"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -68,16 +119,7 @@ export default function LoginPage() {
             <p className="text-sm text-muted-foreground">Controle de Validade</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {isRegister && (
-              <>
-                <div><Label>Nome do Mercado</Label><Input placeholder="Supermercado XYZ" className="mt-1" value={nomeMercado} onChange={(e) => setNomeMercado(e.target.value)} required /></div>
-                <div><Label>CNPJ</Label><Input placeholder="00.000.000/0000-00" className="mt-1" value={cnpj} onChange={(e) => setCnpj(e.target.value)} required /></div>
-                <div><Label>Nome do Gerente</Label><Input placeholder="Seu nome" className="mt-1" value={nomeGerente} onChange={(e) => setNomeGerente(e.target.value)} required /></div>
-                <div><Label>CPF</Label><Input placeholder="000.000.000-00" className="mt-1" value={cpf} onChange={(e) => setCpf(e.target.value)} /></div>
-                <div><Label>Endereço</Label><Input placeholder="Rua, número, cidade" className="mt-1" value={endereco} onChange={(e) => setEndereco(e.target.value)} /></div>
-              </>
-            )}
+          <form onSubmit={handleLogin} className="space-y-3">
             <div>
               <Label>Email</Label>
               <div className="relative mt-1">
@@ -109,24 +151,14 @@ export default function LoginPage() {
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Aguarde..." : isRegister ? "Cadastrar Empresa" : "Entrar"}
+              {loading ? "Aguarde..." : "Entrar"}
             </Button>
           </form>
 
-          <div className="text-center space-y-2">
-            <button
-              onClick={() => setIsRegister(!isRegister)}
-              className="text-sm text-primary hover:underline"
-            >
-              {isRegister ? "Já tenho uma conta" : "Cadastrar nova empresa"}
-            </button>
-            {!isRegister && (
-              <div>
-                <a href="/recuperar-senha" className="text-sm text-muted-foreground hover:underline">
-                  Esqueci minha senha
-                </a>
-              </div>
-            )}
+          <div className="text-center">
+            <a href="/recuperar-senha" className="text-sm text-muted-foreground hover:underline">
+              Esqueci minha senha
+            </a>
           </div>
         </CardContent>
       </Card>
