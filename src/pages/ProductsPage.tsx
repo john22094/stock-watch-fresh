@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Pencil, Check, X, ShoppingCart } from "lucide-react";
+import { Search, Plus, Pencil, Check, X, ShoppingCart, Trash2, RotateCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,6 +48,7 @@ export default function ProductsPage() {
 
   const cargo = funcionario?.cargo as string;
   const canAdd = cargo === "gerente" || cargo === "encarregado";
+  const canDelete = cargo === "gerente";
 
   const { data: estoqueItems = [], isLoading } = useQuery({
     queryKey: ["produtos-prateleira", empresaId],
@@ -91,6 +93,30 @@ export default function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ["produtos-prateleira"] });
       setEditingId(null);
       toast({ title: "Quantidade atualizada!" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteProduct = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("estoque").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["produtos-prateleira"] });
+      toast({ title: "Produto removido da prateleira!" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  const resetProducts = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("estoque").delete().eq("empresa_id", empresaId!).not("prateleira_id", "is", null);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["produtos-prateleira"] });
+      toast({ title: "Prateleiras redefinidas com sucesso!" });
     },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
@@ -162,40 +188,65 @@ export default function ProductsPage() {
             </p>
           </div>
         </div>
-        {canAdd && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Adicionar</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Novo Produto na Prateleira</DialogTitle></DialogHeader>
-              <form onSubmit={(e) => { e.preventDefault(); addProduct.mutate(); }} className="space-y-3">
-                <div><Label>Nome</Label><Input placeholder="Nome do produto" value={nome} onChange={(e) => setNome(e.target.value)} required /></div>
-                <div><Label>Código de Barras</Label><Input placeholder="Ex: 7891000100103" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} /></div>
-                <div>
-                  <Label>Setor</Label>
-                  <Select value={categoria} onValueChange={setCategoria}>
-                    <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
-                    <SelectContent>{SETORES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div><Label>Descrição</Label><Textarea placeholder="Descrição do produto..." value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={2} /></div>
-                <div>
-                  <Label>Prateleira</Label>
-                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={selectedPrateleiraId} onChange={(e) => setSelectedPrateleiraId(e.target.value)}>
-                    <option value="">Selecione (opcional)</option>
-                    {prateleiras.map((p: any) => <option key={p.id} value={p.id}>{p.nome} - {(p.paletes as any)?.nome}</option>)}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Vencimento</Label><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} required /></div>
-                  <div><Label>Quantidade</Label><Input type="number" placeholder="0" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} required /></div>
-                </div>
-                <Button type="submit" className="w-full" disabled={addProduct.isPending}>Salvar</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
+        <div className="flex gap-2">
+          {canDelete && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10">
+                  <RotateCcw className="h-4 w-4 mr-1" /> Redefinir
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Redefinir Prateleiras?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação é irreversível. Todos os produtos das prateleiras serão excluídos permanentemente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => resetProducts.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Confirmar Exclusão
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {canAdd && (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Adicionar</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Novo Produto na Prateleira</DialogTitle></DialogHeader>
+                <form onSubmit={(e) => { e.preventDefault(); addProduct.mutate(); }} className="space-y-3">
+                  <div><Label>Nome</Label><Input placeholder="Nome do produto" value={nome} onChange={(e) => setNome(e.target.value)} required /></div>
+                  <div><Label>Código de Barras</Label><Input placeholder="Ex: 7891000100103" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} /></div>
+                  <div>
+                    <Label>Setor</Label>
+                    <Select value={categoria} onValueChange={setCategoria}>
+                      <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                      <SelectContent>{SETORES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>Descrição</Label><Textarea placeholder="Descrição do produto..." value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={2} /></div>
+                  <div>
+                    <Label>Prateleira</Label>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={selectedPrateleiraId} onChange={(e) => setSelectedPrateleiraId(e.target.value)}>
+                      <option value="">Selecione (opcional)</option>
+                      {prateleiras.map((p: any) => <option key={p.id} value={p.id}>{p.nome} - {(p.paletes as any)?.nome}</option>)}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Vencimento</Label><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} required /></div>
+                    <div><Label>Quantidade</Label><Input type="number" placeholder="0" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} required /></div>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={addProduct.isPending}>Salvar</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
       <div className="relative">
@@ -222,6 +273,7 @@ export default function ProductsPage() {
                       <th className="px-4 py-2.5 font-medium">Vencimento</th>
                       <th className="px-4 py-2.5 font-medium">Dias</th>
                       <th className="px-4 py-2.5 font-medium">Status</th>
+                      {canDelete && <th className="px-4 py-2.5 font-medium">Ações</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -253,10 +305,31 @@ export default function ProductsPage() {
                           <span className={cn(p.days <= 0 ? "text-[hsl(var(--status-danger))]" : p.days <= 7 ? "text-[hsl(var(--status-warning))]" : "")}>{p.days}d</span>
                         </td>
                         <td className="px-4 py-3"><StatusBadge days={p.days} /></td>
+                        {canDelete && (
+                          <td className="px-4 py-3">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Remover produto?</AlertDialogTitle>
+                                  <AlertDialogDescription>O produto "{p.prodNome}" será removido permanentemente da prateleira.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => deleteProduct.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remover</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </td>
+                        )}
                       </tr>
                     ))}
                     {filtered.length === 0 && (
-                      <tr><td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">Nenhum produto encontrado</td></tr>
+                      <tr><td colSpan={canDelete ? 9 : 8} className="px-4 py-6 text-center text-muted-foreground">Nenhum produto encontrado</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -287,6 +360,25 @@ export default function ProductsPage() {
                       <Input type="number" className="w-20 h-7 text-xs" value={editQty} onChange={(e) => setEditQty(e.target.value)} autoFocus />
                       <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => updateQty.mutate({ id: p.id, qty: parseInt(editQty) || 0 })}><Check className="h-3 w-3" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingId(null)}><X className="h-3 w-3" /></Button>
+                    </div>
+                  )}
+                  {canDelete && (
+                    <div className="mt-2">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" />Remover</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remover produto?</AlertDialogTitle>
+                            <AlertDialogDescription>O produto "{p.prodNome}" será removido permanentemente.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteProduct.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remover</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   )}
                 </CardContent>
