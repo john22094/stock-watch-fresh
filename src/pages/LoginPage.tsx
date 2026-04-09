@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Package, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import logoImg from "@/assets/logo-validup.png";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -112,10 +113,8 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardContent className="p-6 space-y-6">
           <div className="text-center">
-            <div className="mx-auto w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-3">
-              <Package className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <h1 className="text-xl font-bold">ValidaHub</h1>
+            <img src={logoImg} alt="Valid Up" className="mx-auto h-14 object-contain mb-3" />
+            <h1 className="text-xl font-bold">VALID UP</h1>
             <p className="text-sm text-muted-foreground">Controle de Validade</p>
           </div>
 

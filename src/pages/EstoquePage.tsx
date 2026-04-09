@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Search, AlertTriangle, Warehouse } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Warehouse, RotateCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,7 +34,6 @@ export default function EstoquePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialog, setEditDialog] = useState<any>(null);
 
-  // New pallet entry fields
   const [nome, setNome] = useState("");
   const [codigoBarras, setCodigoBarras] = useState("");
   const [validade, setValidade] = useState("");
@@ -99,7 +99,6 @@ export default function EstoquePage() {
 
   const addEntry = useMutation({
     mutationFn: async () => {
-      // Create product first
       const { data: prod, error: prodErr } = await supabase
         .from("produtos")
         .insert({ nome, codigo_barras: codigoBarras || null, empresa_id: empresaId! })
@@ -156,6 +155,18 @@ export default function EstoquePage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  const resetEstoque = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("estoque").delete().eq("empresa_id", empresaId!).not("palete_id", "is", null);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["estoque-paletes"] });
+      toast({ title: "Estoque redefinido com sucesso!" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
   const alertCount = withDays.filter(p => p.days > 0 && p.days <= 7).length;
   const expiredCount = withDays.filter(p => p.days <= 0).length;
 
@@ -174,6 +185,29 @@ export default function EstoquePage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {canDelete && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10">
+                  <RotateCcw className="h-4 w-4 mr-1" /> Redefinir
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Redefinir Estoque?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação é irreversível. Todos os itens do estoque (paletes) serão excluídos permanentemente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => resetEstoque.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Confirmar Exclusão
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           {canEdit && (
             <>
               <Dialog open={paleteDialogOpen} onOpenChange={setPaleteDialogOpen}>
@@ -282,9 +316,27 @@ export default function EstoquePage() {
                               </Button>
                             )}
                             {canDelete && (
-                              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => deleteEntry.mutate(p.id)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Excluir item?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      O item "{p.prodNome}" será excluído permanentemente do estoque.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => deleteEntry.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                      Excluir
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             )}
                           </div>
                         </td>
@@ -320,7 +372,23 @@ export default function EstoquePage() {
                   {(canEdit || canDelete) && (
                     <div className="mt-2 flex gap-2">
                       {canEdit && <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditDialog({ ...p })}><Pencil className="h-3 w-3 mr-1" />Editar</Button>}
-                      {canDelete && <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={() => deleteEntry.mutate(p.id)}><Trash2 className="h-3 w-3 mr-1" />Excluir</Button>}
+                      {canDelete && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" />Excluir</Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir item?</AlertDialogTitle>
+                              <AlertDialogDescription>O item "{p.prodNome}" será excluído permanentemente.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteEntry.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                     </div>
                   )}
                 </CardContent>

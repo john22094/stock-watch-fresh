@@ -15,6 +15,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logoImg from "@/assets/logo-validup.png";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,11 +93,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <Package className="h-4 w-4 text-sidebar-primary-foreground" />
-          </div>
+          <img src={logoImg} alt="Valid Up" className="h-8 w-8 object-contain" />
           <div>
-            <h1 className="text-sm font-bold text-sidebar-foreground">ValidaHub</h1>
+            <h1 className="text-sm font-bold text-sidebar-foreground">VALID UP</h1>
             <p className="text-[10px] text-sidebar-foreground/60">Controle de Validade</p>
           </div>
         </div>
@@ -155,7 +154,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </Button>
             )}
             <h2 className="text-lg font-semibold">
-              {allNavItems.find((n) => n.path === location.pathname)?.label ?? "ValidaHub"}
+              {allNavItems.find((n) => n.path === location.pathname)?.label ?? "VALID UP"}
             </h2>
           </div>
 
