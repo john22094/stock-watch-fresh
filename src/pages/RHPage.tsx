@@ -93,11 +93,13 @@ export default function RHPage() {
         password: generatedInfo.senha,
         options: {
           data: {
-            nome: `${nome} ${sobrenome}`,
+            nome,
+            sobrenome,
             nome_mercado: empresa?.nome,
             cpf,
             cargo,
             cbo,
+            empresa_id: funcionario!.empresa_id,
             deve_trocar_senha: true,
           },
         },
