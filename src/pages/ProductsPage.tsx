@@ -8,13 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import PinDeleteDialog from "@/components/PinDeleteDialog";
 
 const SETORES = [
   "Frutas", "Verduras", "Açougue/Peixaria", "Padaria/Confeitaria",
@@ -109,14 +109,18 @@ export default function ProductsPage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  // Reset: zero all quantities instead of deleting
   const resetProducts = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("estoque").delete().eq("empresa_id", empresaId!).not("prateleira_id", "is", null);
-      if (error) throw error;
+      const ids = estoqueItems.map((i: any) => i.id);
+      for (const id of ids) {
+        const { error } = await supabase.from("estoque").update({ quantidade: 0 }).eq("id", id);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["produtos-prateleira"] });
-      toast({ title: "Prateleiras redefinidas com sucesso!" });
+      toast({ title: "Prateleiras zeradas! Histórico mantido para auditoria." });
     },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
@@ -190,27 +194,17 @@ export default function ProductsPage() {
         </div>
         <div className="flex gap-2">
           {canDelete && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
+            <PinDeleteDialog
+              trigger={
                 <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10">
-                  <RotateCcw className="h-4 w-4 mr-1" /> Redefinir
+                  <RotateCcw className="h-4 w-4 mr-1" /> Zerar Prateleiras
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Redefinir Prateleiras?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Esta ação é irreversível. Todos os produtos das prateleiras serão excluídos permanentemente.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => resetProducts.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    Confirmar Exclusão
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              }
+              title="Zerar Prateleiras?"
+              description="Todas as quantidades dos produtos nas prateleiras serão zeradas. O histórico será mantido para auditoria."
+              onConfirm={() => resetProducts.mutate()}
+              isPending={resetProducts.isPending}
+            />
           )}
           {canAdd && (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -307,23 +301,16 @@ export default function ProductsPage() {
                         <td className="px-4 py-3"><StatusBadge days={p.days} /></td>
                         {canDelete && (
                           <td className="px-4 py-3">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
+                            <PinDeleteDialog
+                              trigger={
                                 <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Remover produto?</AlertDialogTitle>
-                                  <AlertDialogDescription>O produto "{p.prodNome}" será removido permanentemente da prateleira.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => deleteProduct.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remover</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                              }
+                              title="Remover produto?"
+                              description={`O produto "${p.prodNome}" será removido permanentemente da prateleira.`}
+                              onConfirm={() => deleteProduct.mutate(p.id)}
+                            />
                           </td>
                         )}
                       </tr>
@@ -364,21 +351,12 @@ export default function ProductsPage() {
                   )}
                   {canDelete && (
                     <div className="mt-2">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" />Remover</Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Remover produto?</AlertDialogTitle>
-                            <AlertDialogDescription>O produto "{p.prodNome}" será removido permanentemente.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteProduct.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remover</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <PinDeleteDialog
+                        trigger={<Button variant="outline" size="sm" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" />Remover</Button>}
+                        title="Remover produto?"
+                        description={`O produto "${p.prodNome}" será removido permanentemente.`}
+                        onConfirm={() => deleteProduct.mutate(p.id)}
+                      />
                     </div>
                   )}
                 </CardContent>

@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import PinDeleteDialog from "@/components/PinDeleteDialog";
 
 function StatusBadge({ days }: { days: number }) {
   if (days <= 0) return <Badge className="status-danger text-[10px]">Vencido</Badge>;
@@ -99,6 +99,7 @@ export default function EstoquePage() {
 
   const addEntry = useMutation({
     mutationFn: async () => {
+      // Verify produto exists or create
       const { data: prod, error: prodErr } = await supabase
         .from("produtos")
         .insert({ nome, codigo_barras: codigoBarras || null, empresa_id: empresaId! })
@@ -155,14 +156,18 @@ export default function EstoquePage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  // Reset: zero all quantities instead of deleting
   const resetEstoque = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("estoque").delete().eq("empresa_id", empresaId!).not("palete_id", "is", null);
-      if (error) throw error;
+      const ids = estoqueItems.map((i: any) => i.id);
+      for (const id of ids) {
+        const { error } = await supabase.from("estoque").update({ quantidade: 0 }).eq("id", id);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["estoque-paletes"] });
-      toast({ title: "Estoque redefinido com sucesso!" });
+      toast({ title: "Estoque zerado com sucesso! Histórico mantido para auditoria." });
     },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
@@ -186,27 +191,17 @@ export default function EstoquePage() {
         </div>
         <div className="flex gap-2">
           {canDelete && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
+            <PinDeleteDialog
+              trigger={
                 <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10">
-                  <RotateCcw className="h-4 w-4 mr-1" /> Redefinir
+                  <RotateCcw className="h-4 w-4 mr-1" /> Zerar Estoque
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Redefinir Estoque?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Esta ação é irreversível. Todos os itens do estoque (paletes) serão excluídos permanentemente.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => resetEstoque.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    Confirmar Exclusão
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              }
+              title="Zerar Estoque?"
+              description="Todas as quantidades serão definidas como 0. O histórico será mantido para auditoria."
+              onConfirm={() => resetEstoque.mutate()}
+              isPending={resetEstoque.isPending}
+            />
           )}
           {canEdit && (
             <>
@@ -316,27 +311,16 @@ export default function EstoquePage() {
                               </Button>
                             )}
                             {canDelete && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
+                              <PinDeleteDialog
+                                trigger={
                                   <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Excluir item?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      O item "{p.prodNome}" será excluído permanentemente do estoque.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => deleteEntry.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                      Excluir
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                }
+                                title="Excluir item?"
+                                description={`O item "${p.prodNome}" será excluído permanentemente do estoque.`}
+                                onConfirm={() => deleteEntry.mutate(p.id)}
+                              />
                             )}
                           </div>
                         </td>
@@ -373,21 +357,12 @@ export default function EstoquePage() {
                     <div className="mt-2 flex gap-2">
                       {canEdit && <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditDialog({ ...p })}><Pencil className="h-3 w-3 mr-1" />Editar</Button>}
                       {canDelete && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" />Excluir</Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Excluir item?</AlertDialogTitle>
-                              <AlertDialogDescription>O item "{p.prodNome}" será excluído permanentemente.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteEntry.mutate(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <PinDeleteDialog
+                          trigger={<Button variant="outline" size="sm" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" />Excluir</Button>}
+                          title="Excluir item?"
+                          description={`O item "${p.prodNome}" será excluído permanentemente.`}
+                          onConfirm={() => deleteEntry.mutate(p.id)}
+                        />
                       )}
                     </div>
                   )}
