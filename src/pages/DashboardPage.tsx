@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import DashboardResetButton from "@/components/DashboardResetButton";
 
 const PIE_COLORS = ["hsl(220, 70%, 55%)", "hsl(262, 60%, 55%)", "hsl(180, 60%, 45%)", "hsl(330, 60%, 55%)", "hsl(30, 80%, 55%)"];
 
