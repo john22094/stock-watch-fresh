@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 const PIE_COLORS = ["hsl(220, 70%, 55%)", "hsl(262, 60%, 55%)", "hsl(180, 60%, 45%)", "hsl(330, 60%, 55%)", "hsl(30, 80%, 55%)"];
 
@@ -112,6 +113,7 @@ export default function DashboardPage() {
   const { funcionario } = useAuth();
   const empresaId = funcionario?.empresa_id;
   const [viewMode, setViewMode] = useState<"cards" | "spreadsheet">("cards");
+  useRealtimeSync(["estoque", "produtos", "paletes", "prateleiras"], !!empresaId);
 
   const { data: estoqueItems = [] } = useQuery({
     queryKey: ["estoque-dashboard", empresaId],
