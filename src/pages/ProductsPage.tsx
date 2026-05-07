@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import PinDeleteDialog from "@/components/PinDeleteDialog";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 const SETORES = [
   "Frutas", "Verduras", "Açougue/Peixaria", "Padaria/Confeitaria",
@@ -38,6 +39,7 @@ export default function ProductsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const empresaId = funcionario?.empresa_id;
+  useRealtimeSync(["estoque", "produtos", "prateleiras"], !!empresaId);
 
   const [nome, setNome] = useState("");
   const [codigoBarras, setCodigoBarras] = useState("");
@@ -109,14 +111,15 @@ export default function ProductsPage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
-  // Reset: zero all quantities instead of deleting
+  // Reset: zero all quantities in a single bulk update
   const resetProducts = useMutation({
     mutationFn: async () => {
-      const ids = estoqueItems.map((i: any) => i.id);
-      for (const id of ids) {
-        const { error } = await supabase.from("estoque").update({ quantidade: 0 }).eq("id", id);
-        if (error) throw error;
-      }
+      const { error } = await supabase
+        .from("estoque")
+        .update({ quantidade: 0 })
+        .eq("empresa_id", empresaId!)
+        .not("prateleira_id", "is", null);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["produtos-prateleira"] });

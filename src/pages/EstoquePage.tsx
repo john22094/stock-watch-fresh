@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import PinDeleteDialog from "@/components/PinDeleteDialog";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 function StatusBadge({ days }: { days: number }) {
   if (days <= 0) return <Badge className="status-danger text-[10px]">Vencido</Badge>;
@@ -29,6 +30,7 @@ export default function EstoquePage() {
   const cargo = funcionario?.cargo as string;
   const canEdit = cargo === "gerente" || cargo === "encarregado";
   const canDelete = cargo === "gerente";
+  useRealtimeSync(["estoque", "produtos", "paletes"], !!empresaId);
 
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -156,14 +158,15 @@ export default function EstoquePage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
-  // Reset: zero all quantities instead of deleting
+  // Reset: zero all quantities in a single bulk update
   const resetEstoque = useMutation({
     mutationFn: async () => {
-      const ids = estoqueItems.map((i: any) => i.id);
-      for (const id of ids) {
-        const { error } = await supabase.from("estoque").update({ quantidade: 0 }).eq("id", id);
-        if (error) throw error;
-      }
+      const { error } = await supabase
+        .from("estoque")
+        .update({ quantidade: 0 })
+        .eq("empresa_id", empresaId!)
+        .not("palete_id", "is", null);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["estoque-paletes"] });
