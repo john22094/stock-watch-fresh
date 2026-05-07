@@ -202,13 +202,18 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Visão geral do controle de validade</p>
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          <Button variant={viewMode === "cards" ? "default" : "ghost"} size="sm" onClick={() => setViewMode("cards")}>
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button variant={viewMode === "spreadsheet" ? "default" : "ghost"} size="sm" onClick={() => setViewMode("spreadsheet")}>
-            <TableIcon className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-2">
+          {funcionario?.cargo === "gerente" && empresaId && (
+            <DashboardResetButton empresaId={empresaId} />
+          )}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <Button variant={viewMode === "cards" ? "default" : "ghost"} size="sm" onClick={() => setViewMode("cards")}>
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === "spreadsheet" ? "default" : "ghost"} size="sm" onClick={() => setViewMode("spreadsheet")}>
+              <TableIcon className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
