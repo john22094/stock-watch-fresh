@@ -234,6 +234,18 @@ export default function PalletsPage() {
                         <Plus className="h-4 w-4" />
                       </Button>
                     )}
+                    {canDelete && (
+                      <PinDeleteDialog
+                        trigger={
+                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        }
+                        title="Remover palete?"
+                        description={`O palete "${pallet.nome}" e suas prateleiras serão removidos. Itens de estoque vinculados perderão a referência.`}
+                        onConfirm={() => removePalete.mutate(pallet.id)}
+                      />
+                    )}
                   </div>
                 </CardTitle>
               </CardHeader>
