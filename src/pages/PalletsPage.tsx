@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { ChevronRight, Package, Plus, AlertTriangle } from "lucide-react";
+import { ChevronRight, Package, Plus, AlertTriangle, Trash2 } from "lucide-react";
+import PinDeleteDialog from "@/components/PinDeleteDialog";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,8 @@ export default function PalletsPage() {
   const queryClient = useQueryClient();
   const empresaId = funcionario?.empresa_id;
   const canEdit = funcionario?.cargo === "gerente" || funcionario?.cargo === "encarregado";
+  const canDelete = funcionario?.cargo === "gerente";
+  useRealtimeSync(["paletes", "prateleiras", "estoque", "produtos"], !!empresaId);
 
   const [paleteNome, setPaleteNome] = useState("");
   const [pratNome, setPratNome] = useState("");
