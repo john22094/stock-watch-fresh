@@ -110,6 +110,15 @@ export default function PalletsPage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  const removePalete = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("paletes").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries(); toast({ title: "Palete removido!" }); },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
   const addEntry = useMutation({
     mutationFn: async () => {
       const dataEntrada = `${entryDate}T${entryTime}:00`;
