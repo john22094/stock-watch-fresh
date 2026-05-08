@@ -118,6 +118,7 @@ export default function DashboardPage() {
   const { funcionario } = useAuth();
   const empresaId = funcionario?.empresa_id;
   const [viewMode, setViewMode] = useState<"cards" | "spreadsheet">("cards");
+  const [selected, setSelected] = useState<any | null>(null);
   useRealtimeSync(["estoque", "produtos", "paletes", "prateleiras"], !!empresaId);
 
   const { data: estoqueItems = [] } = useQuery({
@@ -206,7 +207,9 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Visão geral do controle de validade</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <AlertSettingsDialog />
+          {funcionario?.cargo === "gerente" && <DeleteProductDialog items={withDays} />}
           {funcionario?.cargo === "gerente" && empresaId && (
             <DashboardResetButton empresaId={empresaId} />
           )}
@@ -235,10 +238,10 @@ export default function DashboardPage() {
             <TabsTrigger value="stockroom">Estoque / Paletes ({stockroomItems.length})</TabsTrigger>
           </TabsList>
           <TabsContent value="shelves">
-            <Card><CardContent className="p-0"><SpreadsheetView items={shelfItems} title="Prateleiras" /></CardContent></Card>
+            <Card><CardContent className="p-0"><SpreadsheetView items={shelfItems} title="Prateleiras" onSelect={setSelected} /></CardContent></Card>
           </TabsContent>
           <TabsContent value="stockroom">
-            <Card><CardContent className="p-0"><SpreadsheetView items={stockroomItems} title="Estoque" /></CardContent></Card>
+            <Card><CardContent className="p-0"><SpreadsheetView items={stockroomItems} title="Estoque" onSelect={setSelected} /></CardContent></Card>
           </TabsContent>
         </Tabs>
       ) : (
@@ -283,11 +286,17 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <CardView items={urgentProducts} />
+              <CardView items={urgentProducts} onSelect={setSelected} />
             </CardContent>
           </Card>
         </>
       )}
+
+      <ProductDetailDialog item={selected} open={!!selected} onOpenChange={(o) => !o && setSelected(null)} />
+      <ExpiryAlertPopup
+        items={withDays.map((p) => ({ id: p.id, prodNome: p.prodNome, pratNome: p.pratNome, palNome: p.palNome, data_validade: p.data_validade, days: p.days }))}
+        onView={(id) => setSelected(withDays.find((p) => p.id === id) ?? null)}
+      />
     </div>
   );
 }
