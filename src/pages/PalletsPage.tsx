@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { ChevronRight, Package, Plus, AlertTriangle } from "lucide-react";
+import { ChevronRight, Package, Plus, AlertTriangle, Trash2 } from "lucide-react";
+import PinDeleteDialog from "@/components/PinDeleteDialog";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,8 @@ export default function PalletsPage() {
   const queryClient = useQueryClient();
   const empresaId = funcionario?.empresa_id;
   const canEdit = funcionario?.cargo === "gerente" || funcionario?.cargo === "encarregado";
+  const canDelete = funcionario?.cargo === "gerente";
+  useRealtimeSync(["paletes", "prateleiras", "estoque", "produtos"], !!empresaId);
 
   const [paleteNome, setPaleteNome] = useState("");
   const [pratNome, setPratNome] = useState("");
@@ -103,6 +107,15 @@ export default function PalletsPage() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["paletes"] }); toast({ title: "Prateleira criada!" }); setPratDialogOpen(false); setPratNome(""); },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  const removePalete = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("paletes").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries(); toast({ title: "Palete removido!" }); },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
@@ -220,6 +233,18 @@ export default function PalletsPage() {
                       <Button variant="ghost" size="sm" onClick={() => { setSelectedPalete(pallet.id); setPratDialogOpen(true); }}>
                         <Plus className="h-4 w-4" />
                       </Button>
+                    )}
+                    {canDelete && (
+                      <PinDeleteDialog
+                        trigger={
+                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        }
+                        title="Remover palete?"
+                        description={`O palete "${pallet.nome}" e suas prateleiras serão removidos. Itens de estoque vinculados perderão a referência.`}
+                        onConfirm={() => removePalete.mutate(pallet.id)}
+                      />
                     )}
                   </div>
                 </CardTitle>

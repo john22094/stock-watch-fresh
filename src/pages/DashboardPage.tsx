@@ -15,6 +15,10 @@ import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import DashboardResetButton from "@/components/DashboardResetButton";
+import ProductDetailDialog from "@/components/ProductDetailDialog";
+import ExpiryAlertPopup from "@/components/ExpiryAlertPopup";
+import AlertSettingsDialog from "@/components/AlertSettingsDialog";
+import DeleteProductDialog from "@/components/DeleteProductDialog";
 
 const PIE_COLORS = ["hsl(220, 70%, 55%)", "hsl(262, 60%, 55%)", "hsl(180, 60%, 45%)", "hsl(330, 60%, 55%)", "hsl(30, 80%, 55%)"];
 
@@ -46,7 +50,7 @@ function rowClass(days: number) {
   return "";
 }
 
-function SpreadsheetView({ items, title }: { items: any[]; title: string }) {
+function SpreadsheetView({ items, title, onSelect }: { items: any[]; title: string; onSelect: (p: any) => void }) {
   if (items.length === 0) return <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto em {title.toLowerCase()}</p>;
   return (
     <div className="overflow-x-auto">
@@ -63,7 +67,7 @@ function SpreadsheetView({ items, title }: { items: any[]; title: string }) {
         </thead>
         <tbody>
           {items.map((p) => (
-            <tr key={p.id} className={cn("border-b last:border-0 hover:bg-muted/50 transition-colors", rowClass(p.days))}>
+            <tr key={p.id} onClick={() => onSelect(p)} className={cn("border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors", rowClass(p.days))}>
               <td className="px-3 py-2.5 font-medium">{p.prodNome}</td>
               <td className="px-3 py-2.5 font-mono text-xs">{p.prodCodigo || "-"}</td>
               <td className="px-3 py-2.5 text-xs">{new Date(p.data_validade).toLocaleDateString("pt-BR")}</td>
@@ -80,12 +84,12 @@ function SpreadsheetView({ items, title }: { items: any[]; title: string }) {
   );
 }
 
-function CardView({ items }: { items: any[] }) {
+function CardView({ items, onSelect }: { items: any[]; onSelect: (p: any) => void }) {
   if (items.length === 0) return <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto próximo do vencimento</p>;
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {items.map((p) => (
-        <Card key={p.id} className={cn("hover:shadow-md transition-all", p.days <= 0 ? "border-[hsl(var(--status-danger)/0.5)]" : p.days <= 7 ? "border-[hsl(var(--status-warning)/0.5)]" : "")}>
+        <Card key={p.id} onClick={() => onSelect(p)} className={cn("hover:shadow-md hover:scale-[1.02] cursor-pointer transition-all animate-fade-in", p.days <= 0 ? "border-[hsl(var(--status-danger)/0.5)]" : p.days <= 7 ? "border-[hsl(var(--status-warning)/0.5)]" : "")}>
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-2">
               <h3 className="font-semibold text-sm leading-tight">{p.prodNome}</h3>
@@ -114,6 +118,7 @@ export default function DashboardPage() {
   const { funcionario } = useAuth();
   const empresaId = funcionario?.empresa_id;
   const [viewMode, setViewMode] = useState<"cards" | "spreadsheet">("cards");
+  const [selected, setSelected] = useState<any | null>(null);
   useRealtimeSync(["estoque", "produtos", "paletes", "prateleiras"], !!empresaId);
 
   const { data: estoqueItems = [] } = useQuery({
@@ -202,7 +207,9 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Visão geral do controle de validade</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <AlertSettingsDialog />
+          {funcionario?.cargo === "gerente" && <DeleteProductDialog items={withDays} />}
           {funcionario?.cargo === "gerente" && empresaId && (
             <DashboardResetButton empresaId={empresaId} />
           )}
@@ -231,10 +238,10 @@ export default function DashboardPage() {
             <TabsTrigger value="stockroom">Estoque / Paletes ({stockroomItems.length})</TabsTrigger>
           </TabsList>
           <TabsContent value="shelves">
-            <Card><CardContent className="p-0"><SpreadsheetView items={shelfItems} title="Prateleiras" /></CardContent></Card>
+            <Card><CardContent className="p-0"><SpreadsheetView items={shelfItems} title="Prateleiras" onSelect={setSelected} /></CardContent></Card>
           </TabsContent>
           <TabsContent value="stockroom">
-            <Card><CardContent className="p-0"><SpreadsheetView items={stockroomItems} title="Estoque" /></CardContent></Card>
+            <Card><CardContent className="p-0"><SpreadsheetView items={stockroomItems} title="Estoque" onSelect={setSelected} /></CardContent></Card>
           </TabsContent>
         </Tabs>
       ) : (
@@ -279,11 +286,17 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <CardView items={urgentProducts} />
+              <CardView items={urgentProducts} onSelect={setSelected} />
             </CardContent>
           </Card>
         </>
       )}
+
+      <ProductDetailDialog item={selected} open={!!selected} onOpenChange={(o) => !o && setSelected(null)} />
+      <ExpiryAlertPopup
+        items={withDays.map((p) => ({ id: p.id, prodNome: p.prodNome, pratNome: p.pratNome, palNome: p.palNome, data_validade: p.data_validade, days: p.days }))}
+        onView={(id) => setSelected(withDays.find((p) => p.id === id) ?? null)}
+      />
     </div>
   );
 }
