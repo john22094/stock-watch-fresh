@@ -15,6 +15,10 @@ import { differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import DashboardResetButton from "@/components/DashboardResetButton";
+import ProductDetailDialog from "@/components/ProductDetailDialog";
+import ExpiryAlertPopup from "@/components/ExpiryAlertPopup";
+import AlertSettingsDialog from "@/components/AlertSettingsDialog";
+import DeleteProductDialog from "@/components/DeleteProductDialog";
 
 const PIE_COLORS = ["hsl(220, 70%, 55%)", "hsl(262, 60%, 55%)", "hsl(180, 60%, 45%)", "hsl(330, 60%, 55%)", "hsl(30, 80%, 55%)"];
 
@@ -46,7 +50,7 @@ function rowClass(days: number) {
   return "";
 }
 
-function SpreadsheetView({ items, title }: { items: any[]; title: string }) {
+function SpreadsheetView({ items, title, onSelect }: { items: any[]; title: string; onSelect: (p: any) => void }) {
   if (items.length === 0) return <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto em {title.toLowerCase()}</p>;
   return (
     <div className="overflow-x-auto">
@@ -63,7 +67,7 @@ function SpreadsheetView({ items, title }: { items: any[]; title: string }) {
         </thead>
         <tbody>
           {items.map((p) => (
-            <tr key={p.id} className={cn("border-b last:border-0 hover:bg-muted/50 transition-colors", rowClass(p.days))}>
+            <tr key={p.id} onClick={() => onSelect(p)} className={cn("border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors", rowClass(p.days))}>
               <td className="px-3 py-2.5 font-medium">{p.prodNome}</td>
               <td className="px-3 py-2.5 font-mono text-xs">{p.prodCodigo || "-"}</td>
               <td className="px-3 py-2.5 text-xs">{new Date(p.data_validade).toLocaleDateString("pt-BR")}</td>
@@ -80,12 +84,12 @@ function SpreadsheetView({ items, title }: { items: any[]; title: string }) {
   );
 }
 
-function CardView({ items }: { items: any[] }) {
+function CardView({ items, onSelect }: { items: any[]; onSelect: (p: any) => void }) {
   if (items.length === 0) return <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto próximo do vencimento</p>;
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {items.map((p) => (
-        <Card key={p.id} className={cn("hover:shadow-md transition-all", p.days <= 0 ? "border-[hsl(var(--status-danger)/0.5)]" : p.days <= 7 ? "border-[hsl(var(--status-warning)/0.5)]" : "")}>
+        <Card key={p.id} onClick={() => onSelect(p)} className={cn("hover:shadow-md hover:scale-[1.02] cursor-pointer transition-all animate-fade-in", p.days <= 0 ? "border-[hsl(var(--status-danger)/0.5)]" : p.days <= 7 ? "border-[hsl(var(--status-warning)/0.5)]" : "")}>
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-2">
               <h3 className="font-semibold text-sm leading-tight">{p.prodNome}</h3>
