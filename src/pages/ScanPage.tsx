@@ -35,25 +35,40 @@ export default function ScanPage() {
   const [marca, setMarca] = useState("");
 
   const handleScan = async () => {
-    if (!barcode.trim()) return;
+    const term = barcode.trim();
+    if (!term) return;
     setLoading(true);
     try {
-      const { data } = await supabase
+      // 1) Try exact barcode match
+      let { data } = await supabase
         .from("produtos")
         .select("id, nome, marca, categoria")
-        .eq("codigo_barras", barcode.trim())
         .eq("empresa_id", funcionario!.empresa_id)
+        .eq("codigo_barras", term)
         .maybeSingle();
+
+      // 2) Fallback: partial search by name / marca / categoria / barcode
+      if (!data) {
+        const res = await supabase
+          .from("produtos")
+          .select("id, nome, marca, categoria")
+          .eq("empresa_id", funcionario!.empresa_id)
+          .or(`nome.ilike.%${term}%,marca.ilike.%${term}%,categoria.ilike.%${term}%,codigo_barras.ilike.%${term}%`)
+          .limit(1);
+        data = res.data?.[0] ?? null;
+      }
 
       if (data) {
         setFoundProduct(data);
         setStep("form-existing");
+        toast({ title: `Encontrado: ${data.nome}` });
       } else {
         setFoundProduct(null);
         setStep("form-new");
+        toast({ title: "Nenhum produto encontrado", description: "Preencha os dados para cadastrar." });
       }
-    } catch {
-      toast({ title: "Erro ao buscar produto", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Erro ao buscar produto", description: e.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -145,13 +160,13 @@ export default function ScanPage() {
 
           <div className="flex gap-2">
             <Input
-              placeholder="Código de barras"
+              placeholder="Código de barras, nome ou marca"
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               className="font-mono"
               onKeyDown={(e) => e.key === "Enter" && handleScan()}
             />
-            <Button onClick={handleScan} disabled={loading}>
+            <Button onClick={handleScan} disabled={loading || !barcode.trim()}>
               {loading ? "..." : "Buscar"}
             </Button>
           </div>
