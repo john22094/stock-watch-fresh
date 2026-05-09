@@ -112,10 +112,24 @@ export default function PalletsPage() {
 
   const removePalete = useMutation({
     mutationFn: async (id: string) => {
+      // Cascade: remove estoque items linked to this palete first
+      await supabase.from("estoque").delete().eq("palete_id", id);
+      await supabase.from("prateleiras").delete().eq("palete_id", id);
       const { error } = await supabase.from("paletes").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries(); toast({ title: "Palete removido!" }); },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  const removePrateleira = useMutation({
+    mutationFn: async (id: string) => {
+      // Cascade: remove estoque vinculado à prateleira
+      await supabase.from("estoque").delete().eq("prateleira_id", id);
+      const { error } = await supabase.from("prateleiras").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries(); toast({ title: "Prateleira removida!" }); },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
