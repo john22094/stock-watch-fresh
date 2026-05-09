@@ -160,13 +160,13 @@ export default function ScanPage() {
 
           <div className="flex gap-2">
             <Input
-              placeholder="Código de barras"
+              placeholder="Código de barras, nome ou marca"
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               className="font-mono"
               onKeyDown={(e) => e.key === "Enter" && handleScan()}
             />
-            <Button onClick={handleScan} disabled={loading}>
+            <Button onClick={handleScan} disabled={loading || !barcode.trim()}>
               {loading ? "..." : "Buscar"}
             </Button>
           </div>
