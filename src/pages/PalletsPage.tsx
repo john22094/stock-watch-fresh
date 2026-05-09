@@ -283,6 +283,18 @@ export default function PalletsPage() {
                         <Button variant="ghost" size="sm" onClick={() => { setEntryPaleteId(pallet.id); setEntryPrateleiraId(shelf.id); setEntryDialogOpen(true); }}>
                           <Plus className="h-3 w-3" />
                         </Button>
+                        {canDelete && (
+                          <PinDeleteDialog
+                            trigger={
+                              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive h-7 w-7 p-0">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                            title="Remover prateleira?"
+                            description={`A prateleira "${shelf.nome}" e todos os itens vinculados serão removidos permanentemente.`}
+                            onConfirm={() => removePrateleira.mutate(shelf.id)}
+                          />
+                        )}
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </div>
