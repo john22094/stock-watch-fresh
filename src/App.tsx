@@ -12,6 +12,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import ProductsPage from "@/pages/ProductsPage";
 import ScanPage from "@/pages/ScanPage";
 import EstoquePage from "@/pages/EstoquePage";
+import PrateleirasPage from "@/pages/PrateleirasPage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
 import RHPage from "@/pages/RHPage";
 import AuditLogPage from "@/pages/AuditLogPage";
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/produtos" element={<LayoutRoute><ProductsPage /></LayoutRoute>} />
             <Route path="/escanear" element={<LayoutRoute><ScanPage /></LayoutRoute>} />
             <Route path="/estoque" element={<LayoutRoute><EstoquePage /></LayoutRoute>} />
+            <Route path="/prateleiras" element={<LayoutRoute><PrateleirasPage /></LayoutRoute>} />
             <Route path="/funcionarios" element={<LayoutRoute><FuncionariosPage /></LayoutRoute>} />
             <Route path="/rh" element={<LayoutRoute><RHPage /></LayoutRoute>} />
             <Route path="/auditoria" element={<LayoutRoute><AuditLogPage /></LayoutRoute>} />

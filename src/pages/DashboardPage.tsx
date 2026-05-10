@@ -19,6 +19,7 @@ import ProductDetailDialog from "@/components/ProductDetailDialog";
 import ExpiryAlertPopup from "@/components/ExpiryAlertPopup";
 import AlertSettingsDialog from "@/components/AlertSettingsDialog";
 import DeleteProductDialog from "@/components/DeleteProductDialog";
+import LiveMonitor from "@/components/LiveMonitor";
 
 const PIE_COLORS = ["hsl(220, 70%, 55%)", "hsl(262, 60%, 55%)", "hsl(180, 60%, 45%)", "hsl(330, 60%, 55%)", "hsl(30, 80%, 55%)"];
 
@@ -278,17 +279,20 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-[hsl(var(--status-danger))]" />
-                Produtos Próximos do Vencimento
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardView items={urgentProducts} onSelect={setSelected} />
-            </CardContent>
-          </Card>
+          <div className="grid lg:grid-cols-3 gap-4">
+            <Card className="lg:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-[hsl(var(--status-danger))]" />
+                  Produtos Próximos do Vencimento
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardView items={urgentProducts} onSelect={setSelected} />
+              </CardContent>
+            </Card>
+            <LiveMonitor />
+          </div>
         </>
       )}
 
