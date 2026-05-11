@@ -386,15 +386,21 @@ export default function PrateleirasPage() {
                   </div>
                 )}
                 {canEdit && (
-                  <Button size="sm" variant="outline" className="w-full" onClick={() => { setShelfId(s.id); setAddOpen(true); }}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar Produto
-                  </Button>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button size="sm" variant="outline" onClick={() => { setShelfId(s.id); setAddOpen(true); }}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => { setMoveShelfId(s.id); setMoveOpen(true); }}>
+                      <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Mover
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      <MoveToShelfDialog open={moveOpen} onOpenChange={setMoveOpen} defaultShelfId={moveShelfId} />
     </div>
   );
 }
