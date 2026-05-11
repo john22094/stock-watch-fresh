@@ -246,6 +246,92 @@ export type Database = {
           },
         ]
       }
+      mapa_movimentacoes: {
+        Row: {
+          created_at: string
+          destino_prateleira: string | null
+          detalhes: Json | null
+          empresa_id: string
+          estoque_id: string | null
+          funcionario_id: string | null
+          id: string
+          origem_prateleira: string | null
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          destino_prateleira?: string | null
+          detalhes?: Json | null
+          empresa_id: string
+          estoque_id?: string | null
+          funcionario_id?: string | null
+          id?: string
+          origem_prateleira?: string | null
+          tipo: string
+        }
+        Update: {
+          created_at?: string
+          destino_prateleira?: string | null
+          detalhes?: Json | null
+          empresa_id?: string
+          estoque_id?: string | null
+          funcionario_id?: string | null
+          id?: string
+          origem_prateleira?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mapa_movimentacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mapa_movimentacoes_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marcas: {
+        Row: {
+          cor: string
+          created_at: string
+          empresa_id: string
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          cor?: string
+          created_at?: string
+          empresa_id: string
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          cor?: string
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marcas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes: {
         Row: {
           created_at: string
@@ -322,29 +408,70 @@ export type Database = {
       }
       prateleiras: {
         Row: {
+          altura: number
+          capacidade: number
+          cor: string | null
           created_at: string
           id: string
+          largura: number
+          marca_id: string | null
           nome: string
+          observacoes: string | null
           palete_id: string
+          pos_x: number
+          pos_y: number
+          setor_id: string | null
         }
         Insert: {
+          altura?: number
+          capacidade?: number
+          cor?: string | null
           created_at?: string
           id?: string
+          largura?: number
+          marca_id?: string | null
           nome: string
+          observacoes?: string | null
           palete_id: string
+          pos_x?: number
+          pos_y?: number
+          setor_id?: string | null
         }
         Update: {
+          altura?: number
+          capacidade?: number
+          cor?: string | null
           created_at?: string
           id?: string
+          largura?: number
+          marca_id?: string | null
           nome?: string
+          observacoes?: string | null
           palete_id?: string
+          pos_x?: number
+          pos_y?: number
+          setor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "prateleiras_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "marcas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "prateleiras_palete_id_fkey"
             columns: ["palete_id"]
             isOneToOne: false
             referencedRelation: "paletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prateleiras_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
             referencedColumns: ["id"]
           },
         ]
@@ -389,6 +516,63 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      setores: {
+        Row: {
+          altura: number
+          cor: string
+          created_at: string
+          empresa_id: string
+          id: string
+          largura: number
+          marca_id: string | null
+          nome: string
+          pos_x: number
+          pos_y: number
+          updated_at: string
+        }
+        Insert: {
+          altura?: number
+          cor?: string
+          created_at?: string
+          empresa_id: string
+          id?: string
+          largura?: number
+          marca_id?: string | null
+          nome: string
+          pos_x?: number
+          pos_y?: number
+          updated_at?: string
+        }
+        Update: {
+          altura?: number
+          cor?: string
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          largura?: number
+          marca_id?: string | null
+          nome?: string
+          pos_x?: number
+          pos_y?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "setores_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "marcas"
             referencedColumns: ["id"]
           },
         ]
