@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Layers, Plus, Search, Package, AlertTriangle, Loader2 } from "lucide-react";
+import { Layers, Plus, Search, Package, AlertTriangle, Loader2, ArrowRightLeft } from "lucide-react";
+import MoveToShelfDialog from "@/components/MoveToShelfDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,10 @@ export default function PrateleirasPage() {
   const [newShelfOpen, setNewShelfOpen] = useState(false);
   const [newShelfName, setNewShelfName] = useState("");
   const [newShelfPalete, setNewShelfPalete] = useState("");
+
+  // Move-to-shelf dialog
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveShelfId, setMoveShelfId] = useState<string | undefined>(undefined);
 
   const { data: paletes = [], isLoading: loadingPaletes } = useQuery({
     queryKey: ["paletes-shelves", empresaId],
@@ -297,6 +302,12 @@ export default function PrateleirasPage() {
               </DialogContent>
             </Dialog>
           )}
+          {canEdit && (
+            <Button size="sm" variant="secondary" disabled={allShelves.length === 0}
+              onClick={() => { setMoveShelfId(undefined); setMoveOpen(true); }}>
+              <ArrowRightLeft className="h-4 w-4 mr-1" /> Mover para Prateleira
+            </Button>
+          )}
         </div>
       </div>
 
@@ -375,15 +386,21 @@ export default function PrateleirasPage() {
                   </div>
                 )}
                 {canEdit && (
-                  <Button size="sm" variant="outline" className="w-full" onClick={() => { setShelfId(s.id); setAddOpen(true); }}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar Produto
-                  </Button>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button size="sm" variant="outline" onClick={() => { setShelfId(s.id); setAddOpen(true); }}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => { setMoveShelfId(s.id); setMoveOpen(true); }}>
+                      <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Mover
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      <MoveToShelfDialog open={moveOpen} onOpenChange={setMoveOpen} defaultShelfId={moveShelfId} />
     </div>
   );
 }
