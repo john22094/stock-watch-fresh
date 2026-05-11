@@ -60,6 +60,10 @@ export default function PrateleirasPage() {
   const [newShelfName, setNewShelfName] = useState("");
   const [newShelfPalete, setNewShelfPalete] = useState("");
 
+  // Move-to-shelf dialog
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveShelfId, setMoveShelfId] = useState<string | undefined>(undefined);
+
   const { data: paletes = [], isLoading: loadingPaletes } = useQuery({
     queryKey: ["paletes-shelves", empresaId],
     queryFn: async () => {
