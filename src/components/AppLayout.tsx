@@ -6,6 +6,7 @@ import {
   ScanBarcode,
   Warehouse,
   Layers,
+  Map,
   Bell,
   Menu,
   LogOut,
@@ -31,6 +32,7 @@ const navItems = [
   { path: "/escanear", label: "Escanear", icon: ScanBarcode },
   { path: "/estoque", label: "Estoque", icon: Warehouse },
   { path: "/prateleiras", label: "Prateleiras", icon: Layers },
+  { path: "/mapa", label: "Mapa 2D", icon: Map },
 ];
 
 const gerenteNavItems = [
