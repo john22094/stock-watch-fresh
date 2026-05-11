@@ -45,6 +45,7 @@ const App = () => (
             <Route path="/escanear" element={<LayoutRoute><ScanPage /></LayoutRoute>} />
             <Route path="/estoque" element={<LayoutRoute><EstoquePage /></LayoutRoute>} />
             <Route path="/prateleiras" element={<LayoutRoute><PrateleirasPage /></LayoutRoute>} />
+            <Route path="/mapa" element={<LayoutRoute><MapaPage /></LayoutRoute>} />
             <Route path="/funcionarios" element={<LayoutRoute><FuncionariosPage /></LayoutRoute>} />
             <Route path="/rh" element={<LayoutRoute><RHPage /></LayoutRoute>} />
             <Route path="/auditoria" element={<LayoutRoute><AuditLogPage /></LayoutRoute>} />
