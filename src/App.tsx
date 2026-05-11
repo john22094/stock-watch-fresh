@@ -13,6 +13,7 @@ import ProductsPage from "@/pages/ProductsPage";
 import ScanPage from "@/pages/ScanPage";
 import EstoquePage from "@/pages/EstoquePage";
 import PrateleirasPage from "@/pages/PrateleirasPage";
+import MapaPage from "@/pages/MapaPage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
 import RHPage from "@/pages/RHPage";
 import AuditLogPage from "@/pages/AuditLogPage";
