@@ -302,6 +302,12 @@ export default function PrateleirasPage() {
               </DialogContent>
             </Dialog>
           )}
+          {canEdit && (
+            <Button size="sm" variant="secondary" disabled={allShelves.length === 0}
+              onClick={() => { setMoveShelfId(undefined); setMoveOpen(true); }}>
+              <ArrowRightLeft className="h-4 w-4 mr-1" /> Mover para Prateleira
+            </Button>
+          )}
         </div>
       </div>
 
