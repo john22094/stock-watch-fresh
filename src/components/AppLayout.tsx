@@ -6,6 +6,7 @@ import {
   ScanBarcode,
   Warehouse,
   Layers,
+  Map,
   Bell,
   Menu,
   LogOut,
