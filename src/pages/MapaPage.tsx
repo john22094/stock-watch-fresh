@@ -1,830 +1,714 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
-import {
-  Map as MapIcon, Plus, Search, Palette, Layers, Trash2, Pencil, ZoomIn, ZoomOut,
-  Maximize2, MousePointer2, Move, Square, Tag, Loader2, AlertTriangle, Package,
-  Save, X,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import LiveMonitor from "@/components/LiveMonitor";
+import {
+  MapPin, Eye, Pencil, ZoomIn, ZoomOut, Maximize2, Minimize2,
+  MousePointer2, Move, Plus, Square, Layers, Trash2, Save, X, History,
+  RefreshCw, RotateCcw, Search, Truck, Package, Loader2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/* ────────────────────────── tipos ────────────────────────── */
+type Setor = {
+  id: string; nome: string; cor: string;
+  pos_x: number; pos_y: number; largura: number; altura: number;
+};
+type Prateleira = {
+  id: string; nome: string; palete_id: string;
+  pos_x: number; pos_y: number; largura: number; altura: number;
+  cor: string | null; capacidade: number;
+  setor_id: string | null; observacoes: string | null;
+};
+type Layout = {
+  id?: string;
+  recepcao_x: number; recepcao_y: number; recepcao_largura: number; recepcao_altura: number;
+  expedicao_x: number; expedicao_y: number; expedicao_largura: number; expedicao_altura: number;
+  paletes_x: number; paletes_y: number; paletes_largura: number; paletes_altura: number;
+};
+type EstoqueRow = {
+  id: string; prateleira_id: string | null; quantidade: number;
+  produtos?: { nome: string } | null;
+};
+
+const DEFAULT_LAYOUT: Layout = {
+  recepcao_x: 40,  recepcao_y: 60,  recepcao_largura: 140, recepcao_altura: 160,
+  expedicao_x: 40, expedicao_y: 600, expedicao_largura: 140, expedicao_altura: 140,
+  paletes_x: 460,  paletes_y: 760, paletes_largura: 360, paletes_altura: 120,
+};
+
+const WORLD_W = 1200;
+const WORLD_H = 900;
 const GRID = 20;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 
-type Marca = { id: string; nome: string; cor: string };
-type Setor = { id: string; nome: string; cor: string; pos_x: number; pos_y: number; largura: number; altura: number; marca_id: string | null };
-type Prateleira = {
-  id: string; nome: string; palete_id: string; pos_x: number; pos_y: number;
-  largura: number; altura: number; cor: string | null; capacidade: number;
-  marca_id: string | null; setor_id: string | null; observacoes: string | null;
-};
-type EstoqueRow = {
-  id: string; produto_id: string; prateleira_id: string | null; palete_id: string | null;
-  quantidade: number; data_validade: string;
-  produtos?: { nome: string; marca: string | null; codigo_barras: string | null };
-};
+/* ───────────────────── status / cores ───────────────────── */
+function ocupStatus(pct: number) {
+  if (pct === 0)   return { key: "vazio",     fill: "hsl(220 9% 46%)",  ring: "hsl(220 9% 60%)",  bar: "hsl(220 9% 65%)" };
+  if (pct <= 60)   return { key: "ok",        fill: "hsl(142 71% 45%)", ring: "hsl(142 71% 55%)", bar: "hsl(142 71% 50%)" };
+  if (pct <= 85)   return { key: "atencao",   fill: "hsl(38 92% 50%)",  ring: "hsl(38 92% 60%)",  bar: "hsl(38 92% 55%)" };
+  return            { key: "lotado",    fill: "hsl(0 84% 60%)",   ring: "hsl(0 84% 70%)",   bar: "hsl(0 84% 65%)" };
+}
 
+/* ────────────────────────── página ────────────────────────── */
 export default function MapaPage() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
   const empresaId = funcionario?.empresa_id;
-  const canEdit = funcionario?.cargo === "gerente" || funcionario?.cargo === "encarregado";
+  const isGerente = funcionario?.cargo === "gerente";
+  const canEdit = isGerente || funcionario?.cargo === "encarregado";
 
-  useRealtimeSync(["prateleiras", "setores", "marcas", "estoque", "produtos", "paletes"], !!empresaId);
+  useRealtimeSync(["prateleiras", "setores", "estoque", "mapa_layout", "produtos"], !!empresaId);
 
-  // Viewport
-  const [scale, setScale] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [editMode, setEditMode] = useState(false);
-  const [tool, setTool] = useState<"select" | "pan">("select");
-  const [search, setSearch] = useState("");
-  const [highlightId, setHighlightId] = useState<string | null>(null);
-  const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
-  const [selectedSetor, setSelectedSetor] = useState<string | null>(null);
-
-  // Dialogs
-  const [shelfDialog, setShelfDialog] = useState<Prateleira | "new" | null>(null);
-  const [setorDialog, setSetorDialog] = useState<Setor | "new" | null>(null);
-  const [marcasOpen, setMarcasOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
-
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ type: "shelf" | "setor" | "pan"; id?: string; ox: number; oy: number; sx: number; sy: number } | null>(null);
-  const productDragRef = useRef<{ estoqueId: string; quantidade: number; marca: string | null } | null>(null);
-
-  // Queries
-  const { data: marcas = [] } = useQuery({
-    queryKey: ["marcas", empresaId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("marcas").select("*").eq("empresa_id", empresaId!).order("nome");
-      if (error) throw error;
-      return data as Marca[];
-    },
-    enabled: !!empresaId,
-  });
-
-  const { data: setores = [] } = useQuery({
-    queryKey: ["setores", empresaId],
+  /* dados */
+  const setoresQ = useQuery({
+    queryKey: ["mapa-setores", empresaId],
     queryFn: async () => {
       const { data, error } = await supabase.from("setores").select("*").eq("empresa_id", empresaId!);
-      if (error) throw error;
-      return data as Setor[];
+      if (error) throw error; return (data ?? []) as Setor[];
     },
     enabled: !!empresaId,
   });
 
-  const { data: paletes = [] } = useQuery({
-    queryKey: ["paletes-mapa", empresaId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("paletes").select("id, nome").eq("empresa_id", empresaId!).order("nome");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!empresaId,
-  });
-
-  const { data: prateleiras = [], isLoading: loadingShelves } = useQuery({
-    queryKey: ["prateleiras-mapa", empresaId],
-    queryFn: async () => {
-      if (paletes.length === 0) return [] as Prateleira[];
-      const { data, error } = await supabase
-        .from("prateleiras")
-        .select("*")
-        .in("palete_id", paletes.map((p: any) => p.id));
-      if (error) throw error;
-      return data as Prateleira[];
-    },
-    enabled: !!empresaId && paletes.length > 0,
-  });
-
-  const { data: estoque = [] } = useQuery({
-    queryKey: ["estoque-mapa", empresaId],
+  const prateleirasQ = useQuery({
+    queryKey: ["mapa-prateleiras", empresaId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("estoque")
-        .select("id, produto_id, prateleira_id, palete_id, quantidade, data_validade, produtos(nome, marca, codigo_barras)")
-        .eq("empresa_id", empresaId!)
-        .gt("quantidade", 0);
+        .from("prateleiras").select("*, paletes!inner(empresa_id)")
+        .eq("paletes.empresa_id", empresaId!);
       if (error) throw error;
-      return data as EstoqueRow[];
+      return (data ?? []).map(({ paletes, ...p }: any) => p) as Prateleira[];
     },
     enabled: !!empresaId,
   });
 
-  // Estatísticas por prateleira
-  const shelfData = useMemo(() => {
-    const m = new Map<string, { units: number; items: EstoqueRow[] }>();
-    estoque.forEach((e) => {
-      if (!e.prateleira_id) return;
-      const cur = m.get(e.prateleira_id) ?? { units: 0, items: [] };
-      cur.units += e.quantidade || 0;
-      cur.items.push(e);
-      m.set(e.prateleira_id, cur);
+  const estoqueQ = useQuery({
+    queryKey: ["mapa-estoque", empresaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("estoque").select("id, prateleira_id, quantidade, produtos(nome)")
+        .eq("empresa_id", empresaId!);
+      if (error) throw error; return (data ?? []) as EstoqueRow[];
+    },
+    enabled: !!empresaId,
+  });
+
+  const layoutQ = useQuery({
+    queryKey: ["mapa-layout", empresaId],
+    queryFn: async () => {
+      const { data } = await supabase.from("mapa_layout").select("*").eq("empresa_id", empresaId!).maybeSingle();
+      return data as Layout | null;
+    },
+    enabled: !!empresaId,
+  });
+
+  /* estado de edição (rascunho local) */
+  const [editMode, setEditMode] = useState(false);
+  const [tool, setTool] = useState<"select" | "move">("select");
+  const [draftSetores, setDraftSetores] = useState<Setor[] | null>(null);
+  const [draftPrateleiras, setDraftPrateleiras] = useState<Prateleira[] | null>(null);
+  const [draftLayout, setDraftLayout] = useState<Layout | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ kind: "setor" | "prateleira"; id: string } | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPin, setResetPin] = useState("");
+  const [search, setSearch] = useState("");
+
+  const setores      = (editMode && draftSetores)      ? draftSetores      : (setoresQ.data ?? []);
+  const prateleiras  = (editMode && draftPrateleiras)  ? draftPrateleiras  : (prateleirasQ.data ?? []);
+  const layout       = (editMode && draftLayout)       ? draftLayout       : (layoutQ.data ?? DEFAULT_LAYOUT);
+
+  /* agregação de ocupação por prateleira */
+  const ocupMap = useMemo(() => {
+    const m = new Map<string, { qtd: number; topProduto: string | null; topQtd: number }>();
+    (estoqueQ.data ?? []).forEach((r) => {
+      if (!r.prateleira_id) return;
+      const cur = m.get(r.prateleira_id) ?? { qtd: 0, topProduto: null, topQtd: 0 };
+      cur.qtd += r.quantidade;
+      if (r.quantidade > cur.topQtd) {
+        cur.topQtd = r.quantidade;
+        cur.topProduto = r.produtos?.nome ?? null;
+      }
+      m.set(r.prateleira_id, cur);
     });
     return m;
-  }, [estoque]);
+  }, [estoqueQ.data]);
 
-  const unshelfedItems = useMemo(
-    () => estoque.filter((e) => !e.prateleira_id && e.palete_id),
-    [estoque]
-  );
-
-  // Mutations
-  const moveShelf = useMutation({
-    mutationFn: async ({ id, x, y }: { id: string; x: number; y: number }) => {
-      const { error } = await supabase.from("prateleiras").update({ pos_x: x, pos_y: y }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["prateleiras-mapa"] }),
-  });
-
-  const moveSetor = useMutation({
-    mutationFn: async ({ id, x, y }: { id: string; x: number; y: number }) => {
-      const { error } = await supabase.from("setores").update({ pos_x: x, pos_y: y }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["setores"] }),
-  });
-
-  const saveShelf = useMutation({
-    mutationFn: async (s: Partial<Prateleira> & { id?: string; palete_id: string; nome: string }) => {
-      if (s.id) {
-        const { error } = await supabase.from("prateleiras").update({
-          nome: s.nome, palete_id: s.palete_id, cor: s.cor ?? null, capacidade: s.capacidade ?? 50,
-          marca_id: s.marca_id ?? null, setor_id: s.setor_id ?? null, observacoes: s.observacoes ?? null,
-          largura: s.largura ?? 120, altura: s.altura ?? 80,
-        }).eq("id", s.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("prateleiras").insert({
-          nome: s.nome, palete_id: s.palete_id, cor: s.cor ?? null, capacidade: s.capacidade ?? 50,
-          marca_id: s.marca_id ?? null, setor_id: s.setor_id ?? null, observacoes: s.observacoes ?? null,
-          pos_x: snap(100 - pan.x / scale), pos_y: snap(100 - pan.y / scale),
-          largura: s.largura ?? 120, altura: s.altura ?? 80,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => { qc.invalidateQueries(); toast.success("Prateleira salva"); setShelfDialog(null); },
-    onError: (e: any) => toast.error(e.message),
-  });
-
-  const deleteShelf = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("prateleiras").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => { qc.invalidateQueries(); toast.success("Prateleira removida"); setShelfDialog(null); setSelectedShelf(null); },
-    onError: (e: any) => toast.error(e.message),
-  });
-
-  const saveSetor = useMutation({
-    mutationFn: async (s: Partial<Setor> & { nome: string }) => {
-      if (s.id) {
-        const { error } = await supabase.from("setores").update({
-          nome: s.nome, cor: s.cor, marca_id: s.marca_id ?? null,
-          largura: s.largura, altura: s.altura,
-        }).eq("id", s.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("setores").insert({
-          empresa_id: empresaId!, nome: s.nome, cor: s.cor || "#94a3b8",
-          marca_id: s.marca_id ?? null,
-          pos_x: snap(50 - pan.x / scale), pos_y: snap(50 - pan.y / scale),
-          largura: s.largura ?? 320, altura: s.altura ?? 220,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => { qc.invalidateQueries(); toast.success("Setor salvo"); setSetorDialog(null); },
-    onError: (e: any) => toast.error(e.message),
-  });
-
-  const deleteSetor = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("setores").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => { qc.invalidateQueries(); toast.success("Setor removido"); setSetorDialog(null); setSelectedSetor(null); },
-    onError: (e: any) => toast.error(e.message),
-  });
-
-  const moveProduct = useMutation({
-    mutationFn: async ({ estoqueId, prateleiraId, quantidade }: { estoqueId: string; prateleiraId: string; quantidade: number }) => {
-      const src = estoque.find((e) => e.id === estoqueId);
-      if (!src) throw new Error("Item não encontrado");
-      const qty = Math.min(quantidade, src.quantidade);
-      // merge with existing on shelf
-      const existing = estoque.find((e) =>
-        e.prateleira_id === prateleiraId && e.produto_id === src.produto_id && e.data_validade === src.data_validade
-      );
-      if (existing) {
-        const { error: e1 } = await supabase.from("estoque").update({ quantidade: existing.quantidade + qty }).eq("id", existing.id);
-        if (e1) throw e1;
-        if (qty === src.quantidade) {
-          const { error: e2 } = await supabase.from("estoque").delete().eq("id", src.id);
-          if (e2) throw e2;
-        } else {
-          const { error: e2 } = await supabase.from("estoque").update({ quantidade: src.quantidade - qty }).eq("id", src.id);
-          if (e2) throw e2;
-        }
-      } else {
-        if (qty === src.quantidade) {
-          const { error } = await supabase.from("estoque").update({ prateleira_id: prateleiraId }).eq("id", src.id);
-          if (error) throw error;
-        } else {
-          const { error: e1 } = await supabase.from("estoque").update({ quantidade: src.quantidade - qty }).eq("id", src.id);
-          if (e1) throw e1;
-          const { error: e2 } = await supabase.from("estoque").insert({
-            empresa_id: empresaId!, produto_id: src.produto_id, prateleira_id: prateleiraId,
-            quantidade: qty, data_validade: src.data_validade,
-          });
-          if (e2) throw e2;
-        }
-      }
-      // log movimentacao
-      await supabase.from("mapa_movimentacoes").insert({
-        empresa_id: empresaId!, funcionario_id: funcionario?.id, tipo: "MOVE_PRODUCT",
-        estoque_id: estoqueId, destino_prateleira: prateleiraId,
-        detalhes: { quantidade: qty },
-      });
-    },
-    onSuccess: () => { qc.invalidateQueries(); toast.success("Produto movido"); },
-    onError: (e: any) => toast.error(e.message),
-  });
-
-  // Coordinate transform
-  const screenToWorld = useCallback((sx: number, sy: number) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
-    return { x: (sx - rect.left - pan.x) / scale, y: (sy - rect.top - pan.y) / scale };
-  }, [pan, scale]);
-
-  // Drag handlers
-  const onMouseDown = (e: React.MouseEvent, type: "shelf" | "setor", id: string, x: number, y: number) => {
-    if (!editMode || !canEdit || tool !== "select") return;
-    e.stopPropagation();
-    const w = screenToWorld(e.clientX, e.clientY);
-    dragRef.current = { type, id, ox: w.x - x, oy: w.y - y, sx: x, sy: y };
-  };
-
-  const onCanvasMouseDown = (e: React.MouseEvent) => {
-    if (tool === "pan" || (editMode && e.button === 1) || (e.target === canvasRef.current && !editMode)) {
-      dragRef.current = { type: "pan", ox: e.clientX - pan.x, oy: e.clientY - pan.y, sx: pan.x, sy: pan.y };
-    } else if (e.target === canvasRef.current) {
-      setSelectedShelf(null);
-      setSelectedSetor(null);
-    }
-  };
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      if (d.type === "pan") {
-        setPan({ x: e.clientX - d.ox, y: e.clientY - d.oy });
-        return;
-      }
-      const w = screenToWorld(e.clientX, e.clientY);
-      const nx = snap(w.x - d.ox);
-      const ny = snap(w.y - d.oy);
-      if (d.type === "shelf") {
-        qc.setQueryData(["prateleiras-mapa", empresaId], (old: Prateleira[] | undefined) =>
-          (old ?? []).map((s) => (s.id === d.id ? { ...s, pos_x: nx, pos_y: ny } : s))
-        );
-      } else if (d.type === "setor") {
-        qc.setQueryData(["setores", empresaId], (old: Setor[] | undefined) =>
-          (old ?? []).map((s) => (s.id === d.id ? { ...s, pos_x: nx, pos_y: ny } : s))
-        );
-      }
+  /* totais para o painel direito */
+  const totals = useMemo(() => {
+    const cap = prateleiras.reduce((a, p) => a + (p.capacidade ?? 0), 0);
+    const occ = [...ocupMap.values()].reduce((a, v) => a + v.qtd, 0);
+    return {
+      shelves: prateleiras.length,
+      cap,
+      occ,
+      pct: cap ? Math.round((occ / cap) * 100) : 0,
     };
-    const onUp = () => {
-      const d = dragRef.current;
-      if (!d) return;
-      dragRef.current = null;
-      if (d.type === "shelf") {
-        const s = (qc.getQueryData(["prateleiras-mapa", empresaId]) as Prateleira[] | undefined)?.find((x) => x.id === d.id);
-        if (s && (s.pos_x !== d.sx || s.pos_y !== d.sy)) moveShelf.mutate({ id: s.id, x: s.pos_x, y: s.pos_y });
-      } else if (d.type === "setor") {
-        const s = (qc.getQueryData(["setores", empresaId]) as Setor[] | undefined)?.find((x) => x.id === d.id);
-        if (s && (s.pos_x !== d.sx || s.pos_y !== d.sy)) moveSetor.mutate({ id: s.id, x: s.pos_x, y: s.pos_y });
+  }, [prateleiras, ocupMap]);
+
+  /* início do modo edição */
+  function enterEdit() {
+    if (!canEdit) { toast.error("Sem permissão para editar o mapa"); return; }
+    setDraftSetores(JSON.parse(JSON.stringify(setoresQ.data ?? [])));
+    setDraftPrateleiras(JSON.parse(JSON.stringify(prateleirasQ.data ?? [])));
+    setDraftLayout(JSON.parse(JSON.stringify(layoutQ.data ?? DEFAULT_LAYOUT)));
+    setEditMode(true);
+    setTool("move");
+  }
+  function cancelEdit() {
+    setDraftSetores(null); setDraftPrateleiras(null); setDraftLayout(null);
+    setSelectedId(null); setEditMode(false);
+  }
+
+  /* save */
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      if (!empresaId) throw new Error("empresa");
+      // setores
+      for (const s of draftSetores ?? []) {
+        const { error } = await supabase.from("setores")
+          .update({ pos_x: s.pos_x, pos_y: s.pos_y, largura: s.largura, altura: s.altura, nome: s.nome, cor: s.cor })
+          .eq("id", s.id);
+        if (error) throw error;
       }
+      // prateleiras
+      for (const p of draftPrateleiras ?? []) {
+        const { error } = await supabase.from("prateleiras")
+          .update({ pos_x: p.pos_x, pos_y: p.pos_y, largura: p.largura, altura: p.altura, nome: p.nome, capacidade: p.capacidade, cor: p.cor, setor_id: p.setor_id })
+          .eq("id", p.id);
+        if (error) throw error;
+      }
+      // layout (upsert)
+      if (draftLayout) {
+        const { error } = await supabase.from("mapa_layout").upsert({ ...draftLayout, empresa_id: empresaId }, { onConflict: "empresa_id" });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Mapa salvo!");
+      qc.invalidateQueries({ queryKey: ["mapa-setores"] });
+      qc.invalidateQueries({ queryKey: ["mapa-prateleiras"] });
+      qc.invalidateQueries({ queryKey: ["mapa-layout"] });
+      cancelEdit();
+    },
+    onError: (e: any) => toast.error(e.message ?? "Erro ao salvar"),
+  });
+
+  /* CRUD: criar setor / prateleira / excluir */
+  const addSetor = useMutation({
+    mutationFn: async () => {
+      if (!empresaId) throw new Error();
+      const { data, error } = await supabase.from("setores")
+        .insert({ empresa_id: empresaId, nome: "Novo Setor", cor: "#3b82f6", pos_x: 200, pos_y: 200, largura: 280, altura: 200 })
+        .select().single();
+      if (error) throw error; return data;
+    },
+    onSuccess: () => { toast.success("Setor criado"); qc.invalidateQueries({ queryKey: ["mapa-setores"] }); cancelEdit(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const addPrateleira = useMutation({
+    mutationFn: async () => {
+      if (!empresaId) throw new Error();
+      // pega/cria um palete default
+      const { data: pal } = await supabase.from("paletes").select("id").eq("empresa_id", empresaId).limit(1).maybeSingle();
+      let paletId = pal?.id;
+      if (!paletId) {
+        const { data: novo, error: e1 } = await supabase.from("paletes").insert({ empresa_id: empresaId, nome: "Palete 1" }).select().single();
+        if (e1) throw e1; paletId = novo!.id;
+      }
+      const codigo = `P${String(((prateleirasQ.data?.length ?? 0) + 1)).padStart(2, "0")}`;
+      const { error } = await supabase.from("prateleiras")
+        .insert({ palete_id: paletId, nome: codigo, pos_x: 220, pos_y: 220, largura: 120, altura: 80, capacidade: 50 });
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Prateleira criada"); qc.invalidateQueries({ queryKey: ["mapa-prateleiras"] }); cancelEdit(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const delMut = useMutation({
+    mutationFn: async (sel: { kind: "setor" | "prateleira"; id: string }) => {
+      const tbl = sel.kind === "setor" ? "setores" : "prateleiras";
+      const { error } = await supabase.from(tbl).delete().eq("id", sel.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Excluído"); qc.invalidateQueries(); setSelectedId(null); cancelEdit(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  /* reset com PIN */
+  function doReset() {
+    if (resetPin !== "0912") { toast.error("PIN incorreto"); return; }
+    (async () => {
+      try {
+        const sets = setoresQ.data ?? [];
+        for (let i = 0; i < sets.length; i++) {
+          const col = i % 4, row = Math.floor(i / 4);
+          await supabase.from("setores").update({ pos_x: 220 + col * 220, pos_y: 80 + row * 220, largura: 200, altura: 200 }).eq("id", sets[i].id);
+        }
+        const pr = prateleirasQ.data ?? [];
+        for (let i = 0; i < pr.length; i++) {
+          const col = i % 8, row = Math.floor(i / 8);
+          await supabase.from("prateleiras").update({ pos_x: 220 + col * 130, pos_y: 100 + row * 90 }).eq("id", pr[i].id);
+        }
+        if (empresaId) await supabase.from("mapa_layout").upsert({ ...DEFAULT_LAYOUT, empresa_id: empresaId }, { onConflict: "empresa_id" });
+        toast.success("Mapa resetado");
+        qc.invalidateQueries(); setResetOpen(false); setResetPin(""); cancelEdit();
+      } catch (e: any) { toast.error(e.message); }
+    })();
+  }
+
+  /* viewport & pan/zoom */
+  const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ x: 0, y: 0, w: WORLD_W, h: WORLD_H });
+  const zoomPct = Math.round((WORLD_W / view.w) * 100);
+  function setZoom(pct: number) {
+    const w = WORLD_W * (100 / pct), h = WORLD_H * (100 / pct);
+    setView({ x: Math.max(0, Math.min(WORLD_W - w, view.x)), y: Math.max(0, Math.min(WORLD_H - h, view.y)), w, h });
+  }
+
+  /* drag genérico no svg */
+  type Drag = { kind: "setor" | "prateleira" | "zone-rec" | "zone-exp" | "zone-pal" | "pan"; id?: string; startX: number; startY: number; origX: number; origY: number };
+  const dragRef = useRef<Drag | null>(null);
+
+  function clientToWorld(clientX: number, clientY: number) {
+    const svg = svgRef.current!;
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: view.x + ((clientX - rect.left) / rect.width) * view.w,
+      y: view.y + ((clientY - rect.top) / rect.height) * view.h,
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, [empresaId, qc, screenToWorld, moveShelf, moveSetor]);
+  }
 
-  // Wheel zoom
-  const onWheel = (e: React.WheelEvent) => {
-    if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale((s) => Math.min(2.5, Math.max(0.3, s * delta)));
-  };
-
-  // Search
-  const searchMatches = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return new Set<string>();
-    const matched = new Set<string>();
-    prateleiras.forEach((p) => {
-      if (p.nome.toLowerCase().includes(q)) matched.add(p.id);
-      const items = shelfData.get(p.id)?.items ?? [];
-      if (items.some((i) =>
-        i.produtos?.nome?.toLowerCase().includes(q) ||
-        i.produtos?.marca?.toLowerCase().includes(q) ||
-        i.produtos?.codigo_barras?.toLowerCase().includes(q)
-      )) matched.add(p.id);
-      const marca = marcas.find((m) => m.id === p.marca_id);
-      if (marca?.nome.toLowerCase().includes(q)) matched.add(p.id);
-    });
-    return matched;
-  }, [search, prateleiras, shelfData, marcas]);
-
-  useEffect(() => {
-    if (searchMatches.size === 1) {
-      const id = Array.from(searchMatches)[0];
-      setHighlightId(id);
-      const t = setTimeout(() => setHighlightId(null), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [searchMatches]);
-
-  // Drop product on shelf
-  const onShelfDrop = (e: React.DragEvent, shelf: Prateleira) => {
-    e.preventDefault();
+  function startDrag(e: React.PointerEvent, kind: Drag["kind"], id: string | undefined, origX: number, origY: number) {
+    if (!editMode && kind !== "pan") return;
     e.stopPropagation();
-    const drag = productDragRef.current;
-    if (!drag) return;
-    const shelfMarca = marcas.find((m) => m.id === shelf.marca_id);
-    if (shelfMarca && drag.marca && shelfMarca.nome.toLowerCase() !== drag.marca.toLowerCase()) {
-      const ok = window.confirm(
-        `⚠ CONFLITO DE MARCAS\n\nA prateleira "${shelf.nome}" é reservada para "${shelfMarca.nome}", mas o produto é da marca "${drag.marca}".\n\nDeseja mover mesmo assim?`
-      );
-      if (!ok) { productDragRef.current = null; return; }
-    }
-    const units = shelfData.get(shelf.id)?.units ?? 0;
-    if (units + drag.quantidade > shelf.capacidade) {
-      toast.warning(`Capacidade excedida (${units + drag.quantidade}/${shelf.capacidade})`);
-    }
-    moveProduct.mutate({ estoqueId: drag.estoqueId, prateleiraId: shelf.id, quantidade: drag.quantidade });
-    productDragRef.current = null;
-  };
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const w = clientToWorld(e.clientX, e.clientY);
+    dragRef.current = { kind, id, startX: w.x, startY: w.y, origX, origY };
+    if (kind !== "pan" && id) setSelectedId(id);
+  }
 
-  if (!empresaId) return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></div>;
+  function onPointerMove(e: React.PointerEvent) {
+    const d = dragRef.current; if (!d) return;
+    const w = clientToWorld(e.clientX, e.clientY);
+    const dx = w.x - d.startX, dy = w.y - d.startY;
+    if (d.kind === "pan") {
+      setView(v => ({ ...v, x: Math.max(0, Math.min(WORLD_W - v.w, d.origX - dx)), y: Math.max(0, Math.min(WORLD_H - v.h, d.origY - dy)) }));
+      return;
+    }
+    const nx = snap(d.origX + dx), ny = snap(d.origY + dy);
+    if (d.kind === "setor" && d.id) {
+      setDraftSetores(s => s!.map(x => x.id === d.id ? { ...x, pos_x: Math.max(0, nx), pos_y: Math.max(0, ny) } : x));
+    } else if (d.kind === "prateleira" && d.id) {
+      setDraftPrateleiras(s => s!.map(x => x.id === d.id ? { ...x, pos_x: Math.max(0, nx), pos_y: Math.max(0, ny) } : x));
+    } else if (d.kind === "zone-rec") {
+      setDraftLayout(l => ({ ...l!, recepcao_x: Math.max(0, nx), recepcao_y: Math.max(0, ny) }));
+    } else if (d.kind === "zone-exp") {
+      setDraftLayout(l => ({ ...l!, expedicao_x: Math.max(0, nx), expedicao_y: Math.max(0, ny) }));
+    } else if (d.kind === "zone-pal") {
+      setDraftLayout(l => ({ ...l!, paletes_x: Math.max(0, nx), paletes_y: Math.max(0, ny) }));
+    }
+  }
+  function endDrag() { dragRef.current = null; }
+
+  /* fullscreen */
+  const [fs, setFs] = useState(false);
+  function toggleFs() {
+    const el = containerRef.current; if (!el) return;
+    if (!document.fullscreenElement) { el.requestFullscreen?.(); setFs(true); }
+    else { document.exitFullscreen?.(); setFs(false); }
+  }
+  useEffect(() => {
+    const h = () => setFs(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", h);
+    return () => document.removeEventListener("fullscreenchange", h);
+  }, []);
+
+  /* destacar busca */
+  const searchLow = search.trim().toLowerCase();
+  function matches(p: Prateleira) {
+    if (!searchLow) return false;
+    const o = ocupMap.get(p.id);
+    return p.nome.toLowerCase().includes(searchLow) || (o?.topProduto ?? "").toLowerCase().includes(searchLow);
+  }
+
+  /* prateleira em edição */
+  const editingItem = editing?.kind === "setor"
+    ? draftSetores?.find(s => s.id === editing.id)
+    : draftPrateleiras?.find(p => p.id === editing.id);
+
+  const loading = setoresQ.isLoading || prateleirasQ.isLoading || estoqueQ.isLoading;
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-7rem)] gap-3">
-      {/* Sidebar lateral: busca + listas */}
-      <aside className="lg:w-72 flex flex-col gap-3 shrink-0">
-        <Card><CardContent className="p-3 space-y-2">
-          <div className="flex items-center gap-2 font-semibold text-sm"><MapIcon className="h-4 w-4" /> Mapa 2D</div>
-          <div className="relative">
-            <Search className="h-4 w-4 absolute left-2 top-2.5 text-muted-foreground" />
-            <Input placeholder="Produto, marca, código…" className="pl-8 h-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          {search && (
-            <div className="text-xs text-muted-foreground">
-              {searchMatches.size} prateleira(s) encontrada(s)
-            </div>
-          )}
-          <div className="flex items-center justify-between pt-1">
-            <Label className="text-xs flex items-center gap-2">
-              <Switch checked={editMode} onCheckedChange={setEditMode} disabled={!canEdit} />
-              Modo edição
-            </Label>
-            <Button size="sm" variant="outline" onClick={() => setMarcasOpen(true)} className="h-8 gap-1">
-              <Palette className="h-3.5 w-3.5" /> Marcas
-            </Button>
-          </div>
-        </CardContent></Card>
-
-        {/* Marcas legenda */}
-        <Card><CardContent className="p-3">
-          <div className="text-xs font-semibold mb-2 flex items-center gap-1"><Tag className="h-3.5 w-3.5" /> Marcas ({marcas.length})</div>
-          <div className="flex flex-wrap gap-1.5">
-            {marcas.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma marca cadastrada.</p>}
-            {marcas.map((m) => (
-              <Badge key={m.id} variant="outline" className="gap-1.5 border-0" style={{ backgroundColor: m.cor + "33", color: m.cor }}>
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: m.cor }} />
-                {m.nome}
-              </Badge>
-            ))}
-          </div>
-        </CardContent></Card>
-
-        {/* Produtos sem prateleira (drag source) */}
-        <Card className="flex-1 min-h-0"><CardContent className="p-3 h-full flex flex-col">
-          <div className="text-xs font-semibold mb-2 flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Estoque solto ({unshelfedItems.length})</div>
-          <p className="text-[10px] text-muted-foreground mb-2">Arraste para uma prateleira no mapa</p>
-          <div className="flex-1 overflow-auto space-y-1 -mx-1 px-1">
-            {unshelfedItems.length === 0 && <p className="text-xs text-muted-foreground">Sem produtos pendentes.</p>}
-            {unshelfedItems.map((e) => (
-              <div
-                key={e.id}
-                draggable
-                onDragStart={() => { productDragRef.current = { estoqueId: e.id, quantidade: e.quantidade, marca: e.produtos?.marca ?? null }; }}
-                onDragEnd={() => { productDragRef.current = null; }}
-                className="text-xs border rounded-md p-2 bg-card hover:bg-accent cursor-grab active:cursor-grabbing transition-colors"
-              >
-                <div className="font-medium truncate">{e.produtos?.nome}</div>
-                <div className="flex items-center justify-between text-muted-foreground mt-0.5">
-                  <span className="truncate">{e.produtos?.marca || "—"}</span>
-                  <Badge variant="secondary" className="h-4 text-[10px]">{e.quantidade}</Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent></Card>
-      </aside>
-
-      {/* Canvas */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Toolbar */}
-        <div className="bg-card border rounded-lg p-2 mb-2 flex items-center gap-1 flex-wrap">
-          <Button size="sm" variant={tool === "select" ? "default" : "ghost"} onClick={() => setTool("select")} className="h-8 gap-1">
-            <MousePointer2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Selecionar</span>
-          </Button>
-          <Button size="sm" variant={tool === "pan" ? "default" : "ghost"} onClick={() => setTool("pan")} className="h-8 gap-1">
-            <Move className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Mover</span>
-          </Button>
-          <div className="w-px h-6 bg-border mx-1" />
-          {editMode && canEdit && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => setShelfDialog("new")} className="h-8 gap-1">
-                <Plus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Prateleira</span>
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setSetorDialog("new")} className="h-8 gap-1">
-                <Square className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Setor</span>
-              </Button>
-              <div className="w-px h-6 bg-border mx-1" />
-            </>
-          )}
-          <Button size="sm" variant="ghost" onClick={() => setScale((s) => Math.max(0.3, s - 0.1))} className="h-8 w-8 p-0"><ZoomOut className="h-4 w-4" /></Button>
-          <span className="text-xs font-mono w-12 text-center">{Math.round(scale * 100)}%</span>
-          <Button size="sm" variant="ghost" onClick={() => setScale((s) => Math.min(2.5, s + 0.1))} className="h-8 w-8 p-0"><ZoomIn className="h-4 w-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={() => { setScale(1); setPan({ x: 0, y: 0 }); }} className="h-8 w-8 p-0"><Maximize2 className="h-4 w-4" /></Button>
-          <div className="ml-auto text-xs text-muted-foreground hidden md:block">
-            {prateleiras.length} prateleiras · {setores.length} setores · Ctrl+Scroll p/ zoom
+    <div ref={containerRef} className="bg-[hsl(222_47%_8%)] text-white -m-4 md:-m-6 min-h-[calc(100vh-3.5rem)] flex flex-col">
+      {/* HEADER */}
+      <header className="px-4 py-3 flex items-center gap-3 border-b border-white/5 bg-[hsl(222_47%_6%)] flex-wrap">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-lg font-bold tracking-wide">MAPA 2D DO ESTOQUE</h1>
+            <p className="text-[11px] text-white/50 -mt-0.5">Visão Geral do Estoque</p>
           </div>
         </div>
 
-        {/* Canvas viewport */}
-        <div
-          ref={canvasRef}
-          onMouseDown={onCanvasMouseDown}
-          onWheel={onWheel}
-          onDragOver={(e) => e.preventDefault()}
-          className={cn(
-            "flex-1 relative overflow-hidden border rounded-lg bg-muted/30 touch-none",
-            tool === "pan" ? "cursor-grab" : "cursor-default",
-            dragRef.current?.type === "pan" && "cursor-grabbing"
-          )}
-          style={{
-            backgroundImage: `radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)`,
-            backgroundSize: `${GRID * scale}px ${GRID * scale}px`,
-            backgroundPosition: `${pan.x}px ${pan.y}px`,
-          }}
-        >
-          {loadingShelves && <Loader2 className="h-6 w-6 animate-spin absolute top-4 left-4 text-muted-foreground" />}
-
-          {prateleiras.length === 0 && setores.length === 0 && !loadingShelves && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center text-muted-foreground">
-                <Layers className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="font-medium">Mapa vazio</p>
-                <p className="text-sm">{canEdit ? "Ative o modo edição e crie setores e prateleiras." : "Aguarde o gestor configurar o mapa."}</p>
-              </div>
-            </div>
-          )}
-
-          <div
-            className="absolute top-0 left-0 origin-top-left"
-            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}
-          >
-            {/* SETORES (atrás) */}
-            {setores.map((s) => (
-              <div
-                key={s.id}
-                onMouseDown={(e) => onMouseDown(e, "setor", s.id, s.pos_x, s.pos_y)}
-                onClick={(e) => { e.stopPropagation(); setSelectedSetor(s.id); setSelectedShelf(null); }}
-                onDoubleClick={() => editMode && canEdit && setSetorDialog(s)}
-                className={cn(
-                  "absolute rounded-lg border-2 border-dashed transition-shadow",
-                  editMode && canEdit && tool === "select" ? "cursor-move" : "cursor-pointer",
-                  selectedSetor === s.id && "ring-2 ring-primary ring-offset-2"
-                )}
-                style={{
-                  left: s.pos_x, top: s.pos_y, width: s.largura, height: s.altura,
-                  backgroundColor: s.cor + "1a", borderColor: s.cor,
-                }}
-              >
-                <div className="absolute top-1 left-2 text-xs font-bold px-2 py-0.5 rounded" style={{ backgroundColor: s.cor, color: "white" }}>
-                  {s.nome}
-                </div>
-              </div>
-            ))}
-
-            {/* PRATELEIRAS */}
-            {prateleiras.map((p) => {
-              const data = shelfData.get(p.id) ?? { units: 0, items: [] };
-              const marca = marcas.find((m) => m.id === p.marca_id);
-              const baseCor = marca?.cor || p.cor || "hsl(var(--primary))";
-              const pct = Math.min(100, (data.units / Math.max(1, p.capacidade)) * 100);
-              const isFull = data.units >= p.capacidade;
-              const isHighlighted = highlightId === p.id || searchMatches.has(p.id);
-              const dim = search && searchMatches.size > 0 && !searchMatches.has(p.id);
-              return (
-                <div
-                  key={p.id}
-                  onMouseDown={(e) => onMouseDown(e, "shelf", p.id, p.pos_x, p.pos_y)}
-                  onClick={(e) => { e.stopPropagation(); setSelectedShelf(p.id); setSelectedSetor(null); }}
-                  onDoubleClick={() => { setSelectedShelf(p.id); setDetailOpen(true); }}
-                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                  onDrop={(e) => onShelfDrop(e, p)}
-                  className={cn(
-                    "absolute rounded-md border-2 shadow-md flex flex-col overflow-hidden transition-all",
-                    editMode && canEdit && tool === "select" ? "cursor-move" : "cursor-pointer",
-                    selectedShelf === p.id && "ring-2 ring-primary ring-offset-2",
-                    isHighlighted && "animate-pulse ring-4 ring-yellow-400 z-10",
-                    dim && "opacity-30"
-                  )}
-                  style={{
-                    left: p.pos_x, top: p.pos_y, width: p.largura, height: p.altura,
-                    backgroundColor: baseCor + "26", borderColor: baseCor,
-                  }}
-                >
-                  <div className="flex items-center justify-between px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: baseCor }}>
-                    <span className="truncate">{p.nome}</span>
-                    {isFull && <AlertTriangle className="h-3 w-3 shrink-0" />}
-                  </div>
-                  <div className="flex-1 p-1 flex flex-col justify-between">
-                    <div className="text-[10px] truncate" style={{ color: baseCor }}>
-                      {marca?.nome || p.observacoes || "—"}
-                    </div>
-                    <div className="space-y-0.5">
-                      <div className="flex items-center justify-between text-[10px] font-mono">
-                        <span>{data.units}</span>
-                        <span className="text-muted-foreground">/{p.capacidade}</span>
-                      </div>
-                      <div className="h-1 bg-background/50 rounded-full overflow-hidden">
-                        <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: isFull ? "hsl(var(--destructive))" : baseCor }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+        <div className="flex items-center gap-1 ml-auto">
+          <div className="flex bg-white/5 rounded-lg p-1 gap-1">
+            <Button size="sm" variant={!editMode ? "default" : "ghost"} onClick={cancelEdit} className="h-8 gap-1.5">
+              <Eye className="h-3.5 w-3.5" /> Visualização
+            </Button>
+            <Button size="sm" variant={editMode ? "default" : "ghost"} onClick={enterEdit} disabled={!canEdit} className="h-8 gap-1.5">
+              <Pencil className="h-3.5 w-3.5" /> Edição
+            </Button>
           </div>
 
-          {/* Mini info bar */}
-          {(selectedShelf || selectedSetor) && (
-            <div className="absolute bottom-3 right-3 bg-card border rounded-lg shadow-lg p-2 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
-              {selectedShelf && (() => {
-                const p = prateleiras.find((x) => x.id === selectedShelf);
-                if (!p) return null;
-                return <>
-                  <span className="text-xs font-medium px-2">{p.nome}</span>
-                  <Button size="sm" variant="outline" className="h-7" onClick={() => setDetailOpen(true)}>Detalhes</Button>
-                  {editMode && canEdit && (
-                    <>
-                      <Button size="sm" variant="outline" className="h-7 gap-1" onClick={() => setShelfDialog(p)}><Pencil className="h-3 w-3" /></Button>
-                      <Button size="sm" variant="outline" className="h-7 gap-1 text-destructive" onClick={() => { if (confirm(`Excluir "${p.nome}"?`)) deleteShelf.mutate(p.id); }}><Trash2 className="h-3 w-3" /></Button>
-                    </>
-                  )}
-                </>;
-              })()}
-              {selectedSetor && (() => {
-                const s = setores.find((x) => x.id === selectedSetor);
-                if (!s) return null;
-                return <>
-                  <span className="text-xs font-medium px-2">{s.nome}</span>
-                  {editMode && canEdit && (
-                    <>
-                      <Button size="sm" variant="outline" className="h-7" onClick={() => setSetorDialog(s)}><Pencil className="h-3 w-3" /></Button>
-                      <Button size="sm" variant="outline" className="h-7 text-destructive" onClick={() => { if (confirm(`Excluir setor "${s.nome}"?`)) deleteSetor.mutate(s.id); }}><Trash2 className="h-3 w-3" /></Button>
-                    </>
-                  )}
-                </>;
-              })()}
-            </div>
+          <div className="flex items-center bg-white/5 rounded-lg p-1 ml-2">
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setZoom(Math.max(40, zoomPct - 20))}><ZoomOut className="h-4 w-4" /></Button>
+            <span className="px-2 text-xs font-medium tabular-nums w-12 text-center">{zoomPct}%</span>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setZoom(Math.min(300, zoomPct + 20))}><ZoomIn className="h-4 w-4" /></Button>
+          </div>
+
+          <Button size="icon" variant="ghost" className="h-9 w-9 bg-white/5" onClick={toggleFs}>
+            {fs ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </Button>
+          <Button size="icon" variant="ghost" className="h-9 w-9 bg-white/5" onClick={() => qc.invalidateQueries()} title="Atualizar mapa">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          {isGerente && (
+            <Button size="sm" variant="ghost" className="h-9 bg-white/5 gap-1.5" onClick={() => setResetOpen(true)}>
+              <RotateCcw className="h-4 w-4" /> Resetar
+            </Button>
           )}
+        </div>
+      </header>
+
+      {/* SEARCH */}
+      <div className="px-4 py-2 border-b border-white/5 bg-[hsl(222_47%_7%)]">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+          <Input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar prateleira, código ou produto..."
+            className="pl-9 h-9 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+          />
         </div>
       </div>
 
-      {/* Diálogo prateleira */}
-      <ShelfDialog
-        open={shelfDialog !== null}
-        shelf={shelfDialog === "new" ? null : shelfDialog}
-        marcas={marcas}
-        setores={setores}
-        paletes={paletes}
-        onClose={() => setShelfDialog(null)}
-        onSave={(s) => saveShelf.mutate(s)}
-        saving={saveShelf.isPending}
-      />
+      {/* MAIN GRID */}
+      <div className="flex-1 flex min-h-0">
+        {/* CANVAS */}
+        <div className="flex-1 relative overflow-hidden">
+          {loading ? (
+            <div className="h-full flex items-center justify-center text-white/60"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : (
+            <svg
+              ref={svgRef}
+              className={cn("w-full h-full select-none", editMode ? "cursor-move" : "cursor-grab")}
+              viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+              onPointerDown={(e) => startDrag(e, "pan", undefined, view.x, view.y)}
+              onPointerMove={onPointerMove}
+              onPointerUp={endDrag}
+              onPointerLeave={endDrag}
+            >
+              {/* fundo grade */}
+              <defs>
+                <pattern id="grid" width={GRID} height={GRID} patternUnits="userSpaceOnUse">
+                  <path d={`M ${GRID} 0 L 0 0 0 ${GRID}`} fill="none" stroke="hsl(220 9% 22%)" strokeWidth="0.5" />
+                </pattern>
+                <pattern id="floor" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <rect width="40" height="40" fill="hsl(220 9% 18%)" />
+                  <rect width="40" height="40" fill="url(#grid)" />
+                </pattern>
+              </defs>
+              <rect x={0} y={0} width={WORLD_W} height={WORLD_H} fill="url(#floor)" />
 
-      {/* Diálogo setor */}
-      <SetorDialog
-        open={setorDialog !== null}
-        setor={setorDialog === "new" ? null : setorDialog}
-        marcas={marcas}
-        onClose={() => setSetorDialog(null)}
-        onSave={(s) => saveSetor.mutate(s)}
-        saving={saveSetor.isPending}
-      />
+              {/* SETORES */}
+              {setores.map(s => {
+                const sel = selectedId === s.id;
+                return (
+                  <g key={s.id}
+                     onPointerDown={(e) => startDrag(e, "setor", s.id, s.pos_x, s.pos_y)}
+                     onDoubleClick={() => editMode && setEditing({ kind: "setor", id: s.id })}
+                     className={editMode ? "cursor-move" : "cursor-pointer"}>
+                    <rect x={s.pos_x} y={s.pos_y} width={s.largura} height={s.altura}
+                          rx={10} fill={s.cor + "22"} stroke={s.cor}
+                          strokeWidth={sel ? 3 : 1.5} strokeDasharray={editMode ? "6 4" : "0"} />
+                    <text x={s.pos_x + 12} y={s.pos_y + 22} fill={s.cor} fontSize="14" fontWeight="700" letterSpacing="1">
+                      {s.nome.toUpperCase()}
+                    </text>
+                  </g>
+                );
+              })}
 
-      {/* Marcas */}
-      <MarcasDialog open={marcasOpen} onClose={() => setMarcasOpen(false)} marcas={marcas} empresaId={empresaId} canEdit={canEdit} />
+              {/* PRATELEIRAS */}
+              {prateleiras.map(p => {
+                const o = ocupMap.get(p.id);
+                const qtd = o?.qtd ?? 0;
+                const pct = p.capacidade ? Math.min(100, Math.round((qtd / p.capacidade) * 100)) : 0;
+                const st = ocupStatus(pct);
+                const sel = selectedId === p.id;
+                const hi = matches(p);
+                return (
+                  <g key={p.id}
+                     onPointerDown={(e) => startDrag(e, "prateleira", p.id, p.pos_x, p.pos_y)}
+                     onDoubleClick={() => editMode && setEditing({ kind: "prateleira", id: p.id })}
+                     className={editMode ? "cursor-move" : "cursor-pointer"}>
+                    {hi && (
+                      <rect x={p.pos_x - 4} y={p.pos_y - 4} width={p.largura + 8} height={p.altura + 8}
+                            rx={8} fill="none" stroke="hsl(190 95% 60%)" strokeWidth={3}>
+                        <animate attributeName="opacity" values="0.3;1;0.3" dur="1.2s" repeatCount="indefinite" />
+                      </rect>
+                    )}
+                    <rect x={p.pos_x} y={p.pos_y} width={p.largura} height={p.altura}
+                          rx={6} fill={st.fill} stroke={sel ? "white" : st.ring} strokeWidth={sel ? 2.5 : 1} />
+                    <text x={p.pos_x + p.largura / 2} y={p.pos_y + 16} fill="white" fontSize="11" fontWeight="800" textAnchor="middle">
+                      {p.nome}
+                    </text>
+                    <text x={p.pos_x + p.largura / 2} y={p.pos_y + 32} fill="white" fontSize="9" textAnchor="middle" opacity={0.95}>
+                      {(o?.topProduto ?? "—").slice(0, 14)}
+                    </text>
+                    <text x={p.pos_x + p.largura / 2} y={p.pos_y + 46} fill="white" fontSize="8" textAnchor="middle" opacity={0.85}>
+                      {qtd} unid.
+                    </text>
+                    {/* barra ocupação */}
+                    <rect x={p.pos_x + 6} y={p.pos_y + p.altura - 12} width={p.largura - 12} height={5} rx={2} fill="rgba(0,0,0,.35)" />
+                    <rect x={p.pos_x + 6} y={p.pos_y + p.altura - 12} width={(p.largura - 12) * (pct / 100)} height={5} rx={2} fill={st.bar} />
+                    <text x={p.pos_x + p.largura - 8} y={p.pos_y + p.altura - 2} fill="white" fontSize="8" textAnchor="end" fontWeight="700">{pct}%</text>
+                  </g>
+                );
+              })}
 
-      {/* Detalhes prateleira */}
-      <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
-        <SheetContent className="w-full sm:max-w-md overflow-auto">
-          {selectedShelf && (() => {
-            const p = prateleiras.find((x) => x.id === selectedShelf);
-            if (!p) return null;
-            const data = shelfData.get(p.id) ?? { units: 0, items: [] };
-            const marca = marcas.find((m) => m.id === p.marca_id);
-            return <>
-              <SheetHeader><SheetTitle className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: marca?.cor || p.cor || "#3b82f6" }} />
-                {p.nome}
-              </SheetTitle></SheetHeader>
-              <div className="space-y-3 mt-4 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div><div className="text-xs text-muted-foreground">Marca</div><div className="font-medium">{marca?.nome || "—"}</div></div>
-                  <div><div className="text-xs text-muted-foreground">Capacidade</div><div className="font-medium">{data.units}/{p.capacidade}</div></div>
-                </div>
-                {p.observacoes && <div><div className="text-xs text-muted-foreground">Observações</div><p>{p.observacoes}</p></div>}
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Produtos ({data.items.length})</div>
-                  <div className="space-y-1">
-                    {data.items.length === 0 && <p className="text-xs text-muted-foreground">Vazia.</p>}
-                    {data.items.map((i) => (
-                      <div key={i.id} className="border rounded p-2 text-xs">
-                        <div className="font-medium">{i.produtos?.nome}</div>
-                        <div className="flex justify-between text-muted-foreground">
-                          <span>{i.produtos?.marca || "—"} · Val: {i.data_validade}</span>
-                          <span>{i.quantidade}un</span>
-                        </div>
-                      </div>
-                    ))}
+              {/* ZONE: RECEPÇÃO */}
+              <g onPointerDown={(e) => startDrag(e, "zone-rec", "rec", layout.recepcao_x, layout.recepcao_y)}
+                 className={editMode ? "cursor-move" : ""}>
+                <rect x={layout.recepcao_x} y={layout.recepcao_y} width={layout.recepcao_largura} height={layout.recepcao_altura}
+                      rx={8} fill="hsl(220 9% 14%)" stroke="hsl(220 9% 35%)" strokeWidth={1.5} strokeDasharray={editMode ? "5 3" : "0"} />
+                <text x={layout.recepcao_x + layout.recepcao_largura / 2} y={layout.recepcao_y + 22} fill="white" fontSize="12" fontWeight="800" textAnchor="middle">RECEPÇÃO</text>
+                <text x={layout.recepcao_x + layout.recepcao_largura / 2} y={layout.recepcao_y + 38} fill="white" fontSize="9" textAnchor="middle" opacity={0.7}>DE MERCADORIAS</text>
+                <foreignObject x={layout.recepcao_x + layout.recepcao_largura / 2 - 18} y={layout.recepcao_y + 60} width={36} height={36}>
+                  <div className="flex items-center justify-center text-white/80"><Truck size={32} /></div>
+                </foreignObject>
+              </g>
+
+              {/* ZONE: EXPEDIÇÃO */}
+              <g onPointerDown={(e) => startDrag(e, "zone-exp", "exp", layout.expedicao_x, layout.expedicao_y)}
+                 className={editMode ? "cursor-move" : ""}>
+                <rect x={layout.expedicao_x} y={layout.expedicao_y} width={layout.expedicao_largura} height={layout.expedicao_altura}
+                      rx={8} fill="hsl(0 60% 18%)" stroke="hsl(0 70% 45%)" strokeWidth={1.5} strokeDasharray={editMode ? "5 3" : "0"} />
+                <text x={layout.expedicao_x + layout.expedicao_largura / 2} y={layout.expedicao_y + 22} fill="hsl(0 90% 80%)" fontSize="12" fontWeight="800" textAnchor="middle">SAÍDA</text>
+                <text x={layout.expedicao_x + layout.expedicao_largura / 2} y={layout.expedicao_y + 38} fill="hsl(0 90% 80%)" fontSize="9" textAnchor="middle" opacity={0.8}>EXPEDIÇÃO</text>
+                <foreignObject x={layout.expedicao_x + layout.expedicao_largura / 2 - 18} y={layout.expedicao_y + 60} width={36} height={36}>
+                  <div className="flex items-center justify-center text-white/80"><Truck size={32} /></div>
+                </foreignObject>
+              </g>
+
+              {/* ZONE: ÁREA DE PALETES */}
+              <g onPointerDown={(e) => startDrag(e, "zone-pal", "pal", layout.paletes_x, layout.paletes_y)}
+                 className={editMode ? "cursor-move" : ""}>
+                <rect x={layout.paletes_x} y={layout.paletes_y} width={layout.paletes_largura} height={layout.paletes_altura}
+                      rx={8} fill="hsl(220 9% 16%)" stroke="hsl(220 9% 38%)" strokeWidth={1.5} strokeDasharray={editMode ? "5 3" : "0"} />
+                <text x={layout.paletes_x + layout.paletes_largura / 2} y={layout.paletes_y + 24} fill="white" fontSize="13" fontWeight="800" textAnchor="middle">ÁREA DE PALETES</text>
+                <foreignObject x={layout.paletes_x + 16} y={layout.paletes_y + 40} width={layout.paletes_largura - 32} height={layout.paletes_altura - 50}>
+                  <div className="flex justify-around items-center h-full text-white/60">
+                    {Array.from({ length: 5 }).map((_, i) => <Package key={i} size={28} />)}
                   </div>
+                </foreignObject>
+              </g>
+            </svg>
+          )}
+        </div>
+
+        {/* SIDEBAR DIREITA */}
+        <aside className="w-72 shrink-0 border-l border-white/5 bg-[hsl(222_47%_6%)] p-3 space-y-3 overflow-auto hidden lg:block">
+          <div className="rounded-xl bg-white/5 p-3">
+            <h3 className="text-xs font-bold tracking-wider text-white/70 mb-2">LEGENDA</h3>
+            <div className="space-y-1.5 text-xs">
+              <LegItem color="hsl(142 71% 45%)" label="Espaço Disponível" />
+              <LegItem color="hsl(38 92% 50%)"  label="Quase Cheio" />
+              <LegItem color="hsl(0 84% 60%)"   label="Lotado" />
+              <LegItem color="hsl(220 9% 46%)"  label="Vazio" />
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-white/5 p-3">
+            <h3 className="text-xs font-bold tracking-wider text-white/70 mb-2">INFORMAÇÕES GERAIS</h3>
+            <div className="space-y-1.5 text-xs">
+              <Row k="Prateleiras" v={String(totals.shelves)} />
+              <Row k="Capacidade Total" v={`${totals.cap.toLocaleString("pt-BR")} unid.`} />
+              <Row k="Ocupação Atual" v={`${totals.occ.toLocaleString("pt-BR")} unid.`} />
+              <Row k="Taxa de Ocupação" v={`${totals.pct}%`} highlight={totals.pct >= 86 ? "danger" : totals.pct >= 60 ? "warn" : "ok"} />
+            </div>
+          </div>
+
+          {/* MINI MAPA */}
+          <div className="rounded-xl bg-white/5 p-3">
+            <h3 className="text-xs font-bold tracking-wider text-white/70 mb-2">MINI MAPA</h3>
+            <MiniMap setores={setores} prateleiras={prateleiras} view={view} setView={setView} />
+          </div>
+
+          {/* MONITOR AO VIVO */}
+          <LiveMonitor compact />
+        </aside>
+      </div>
+
+      {/* TOOLBAR INFERIOR */}
+      {editMode && (
+        <div className="border-t border-white/5 bg-[hsl(222_47%_6%)] px-3 py-2 flex items-center gap-1.5 flex-wrap">
+          <ToolBtn active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Selecionar" highlight />
+          <ToolBtn active={tool === "move"}   onClick={() => setTool("move")}   icon={Move} label="Mover" />
+          <Sep />
+          <ToolBtn onClick={() => addPrateleira.mutate()} icon={Plus} label="Adicionar Prateleira" />
+          <ToolBtn onClick={() => addSetor.mutate()} icon={Square} label="Adicionar Setor" />
+          <Sep />
+          <ToolBtn
+            onClick={() => {
+              if (!selectedId) return toast.error("Selecione um elemento");
+              const isSetor = (draftSetores ?? []).some(s => s.id === selectedId);
+              delMut.mutate({ kind: isSetor ? "setor" : "prateleira", id: selectedId });
+            }}
+            icon={Trash2} label="Excluir" danger />
+          <ToolBtn onClick={() => {
+            if (!selectedId) return toast.error("Selecione um elemento");
+            const isSetor = (draftSetores ?? []).some(s => s.id === selectedId);
+            setEditing({ kind: isSetor ? "setor" : "prateleira", id: selectedId });
+          }} icon={Pencil} label="Editar" />
+          <div className="ml-auto flex gap-1.5">
+            <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="h-9 gap-1.5">
+              {saveMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Salvar
+            </Button>
+            <Button size="sm" variant="ghost" onClick={cancelEdit} className="h-9 gap-1.5 bg-white/5">
+              <X className="h-3.5 w-3.5" /> Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* DIALOG editar */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar {editing?.kind === "setor" ? "setor" : "prateleira"}</DialogTitle>
+            <DialogDescription>Ajuste nome, cor e dimensões.</DialogDescription>
+          </DialogHeader>
+          {editingItem && editing && (
+            <div className="space-y-3">
+              <div><Label>Nome</Label>
+                <Input value={editingItem.nome} onChange={e => {
+                  const v = e.target.value;
+                  if (editing.kind === "setor") setDraftSetores(s => s!.map(x => x.id === editing.id ? { ...x, nome: v } : x));
+                  else setDraftPrateleiras(s => s!.map(x => x.id === editing.id ? { ...x, nome: v } : x));
+                }} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label>Largura</Label>
+                  <Input type="number" value={(editingItem as any).largura} onChange={e => {
+                    const v = Math.max(40, +e.target.value);
+                    if (editing.kind === "setor") setDraftSetores(s => s!.map(x => x.id === editing.id ? { ...x, largura: v } : x));
+                    else setDraftPrateleiras(s => s!.map(x => x.id === editing.id ? { ...x, largura: v } : x));
+                  }} />
+                </div>
+                <div><Label>Altura</Label>
+                  <Input type="number" value={(editingItem as any).altura} onChange={e => {
+                    const v = Math.max(40, +e.target.value);
+                    if (editing.kind === "setor") setDraftSetores(s => s!.map(x => x.id === editing.id ? { ...x, altura: v } : x));
+                    else setDraftPrateleiras(s => s!.map(x => x.id === editing.id ? { ...x, altura: v } : x));
+                  }} />
                 </div>
               </div>
-            </>;
-          })()}
-        </SheetContent>
-      </Sheet>
+              {editing.kind === "setor" ? (
+                <div><Label>Cor</Label>
+                  <Input type="color" value={(editingItem as Setor).cor}
+                         onChange={e => setDraftSetores(s => s!.map(x => x.id === editing.id ? { ...x, cor: e.target.value } : x))} />
+                </div>
+              ) : (
+                <div><Label>Capacidade</Label>
+                  <Input type="number" value={(editingItem as Prateleira).capacidade}
+                         onChange={e => setDraftPrateleiras(s => s!.map(x => x.id === editing.id ? { ...x, capacidade: Math.max(1, +e.target.value) } : x))} />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setEditing(null)}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* RESET PIN */}
+      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resetar layout do mapa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Restaura as posições padrão de prateleiras, setores e zonas. Não apaga nenhum produto, prateleira ou estoque. Digite o PIN do gerente para continuar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input type="password" placeholder="PIN" value={resetPin} onChange={e => setResetPin(e.target.value)} />
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setResetPin("")}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doReset}>Resetar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-// ---------- Subcomponents ----------
-
-function ShelfDialog({ open, shelf, marcas, setores, paletes, onClose, onSave, saving }: any) {
-  const [form, setForm] = useState<any>({});
-  useEffect(() => {
-    if (open) setForm(shelf ?? { nome: "", palete_id: paletes[0]?.id ?? "", capacidade: 50, largura: 120, altura: 80, cor: "", marca_id: "", setor_id: "", observacoes: "" });
-  }, [open, shelf, paletes]);
-
-  const valid = form.nome?.trim() && form.palete_id;
+/* ───────── helpers UI ───────── */
+function LegItem({ color, label }: { color: string; label: string }) {
+  return <div className="flex items-center gap-2"><span className="w-4 h-4 rounded" style={{ background: color }} /><span className="text-white/80">{label}</span></div>;
+}
+function Row({ k, v, highlight }: { k: string; v: string; highlight?: "ok" | "warn" | "danger" }) {
+  const c = highlight === "danger" ? "text-[hsl(0_84%_70%)]" : highlight === "warn" ? "text-[hsl(38_92%_60%)]" : highlight === "ok" ? "text-[hsl(142_71%_60%)]" : "text-white";
+  return <div className="flex justify-between"><span className="text-white/60">{k}</span><span className={cn("font-semibold tabular-nums", c)}>{v}</span></div>;
+}
+function ToolBtn({ icon: Icon, label, onClick, active, danger, highlight }: any) {
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{shelf ? "Editar prateleira" : "Nova prateleira"}</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div><Label>Nome *</Label><Input value={form.nome || ""} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label>Palete *</Label>
-              <Select value={form.palete_id || ""} onValueChange={(v) => setForm({ ...form, palete_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{paletes.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label>Capacidade</Label><Input type="number" value={form.capacidade || 50} onChange={(e) => setForm({ ...form, capacidade: Number(e.target.value) })} /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label>Marca</Label>
-              <Select value={form.marca_id || "none"} onValueChange={(v) => setForm({ ...form, marca_id: v === "none" ? null : v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="none">— Nenhuma —</SelectItem>{marcas.map((m: Marca) => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label>Setor</Label>
-              <Select value={form.setor_id || "none"} onValueChange={(v) => setForm({ ...form, setor_id: v === "none" ? null : v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="none">— Nenhum —</SelectItem>{setores.map((s: Setor) => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label>Largura</Label><Input type="number" value={form.largura || 120} onChange={(e) => setForm({ ...form, largura: Number(e.target.value) })} /></div>
-            <div><Label>Altura</Label><Input type="number" value={form.altura || 80} onChange={(e) => setForm({ ...form, altura: Number(e.target.value) })} /></div>
-            <div><Label>Cor</Label><Input type="color" value={form.cor || "#3b82f6"} onChange={(e) => setForm({ ...form, cor: e.target.value })} /></div>
-          </div>
-          <div><Label>Observações</Label><Input value={form.observacoes || ""} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} /></div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button disabled={!valid || saving} onClick={() => onSave(form)}>{saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Salvar</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Button size="sm" onClick={onClick}
+      className={cn("h-9 gap-1.5 bg-white/5 hover:bg-white/10 text-white border-0",
+        active && "bg-primary text-primary-foreground hover:bg-primary/90",
+        highlight && !active && "bg-primary/20 text-primary",
+        danger && "hover:bg-destructive/20 hover:text-destructive")}>
+      <Icon className="h-3.5 w-3.5" /> <span className="hidden md:inline">{label}</span>
+    </Button>
   );
 }
+function Sep() { return <div className="w-px h-6 bg-white/10 mx-1" />; }
 
-function SetorDialog({ open, setor, marcas, onClose, onSave, saving }: any) {
-  const [form, setForm] = useState<any>({});
-  useEffect(() => {
-    if (open) setForm(setor ?? { nome: "", cor: "#94a3b8", largura: 320, altura: 220, marca_id: null });
-  }, [open, setor]);
-  const valid = form.nome?.trim();
+function MiniMap({ setores, prateleiras, view, setView }: any) {
+  const W = 240, H = 180;
+  const sx = W / WORLD_W, sy = H / WORLD_H;
+  function onClick(e: React.MouseEvent<SVGSVGElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = ((e.clientX - rect.left) / rect.width) * WORLD_W;
+    const cy = ((e.clientY - rect.top) / rect.height) * WORLD_H;
+    setView({ ...view, x: Math.max(0, Math.min(WORLD_W - view.w, cx - view.w / 2)), y: Math.max(0, Math.min(WORLD_H - view.h, cy - view.h / 2)) });
+  }
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{setor ? "Editar setor" : "Novo setor"}</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div><Label>Nome *</Label><Input value={form.nome || ""} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label>Largura</Label><Input type="number" value={form.largura || 320} onChange={(e) => setForm({ ...form, largura: Number(e.target.value) })} /></div>
-            <div><Label>Altura</Label><Input type="number" value={form.altura || 220} onChange={(e) => setForm({ ...form, altura: Number(e.target.value) })} /></div>
-            <div><Label>Cor</Label><Input type="color" value={form.cor || "#94a3b8"} onChange={(e) => setForm({ ...form, cor: e.target.value })} /></div>
-          </div>
-          <div><Label>Marca reservada</Label>
-            <Select value={form.marca_id || "none"} onValueChange={(v) => setForm({ ...form, marca_id: v === "none" ? null : v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="none">— Nenhuma —</SelectItem>{marcas.map((m: Marca) => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button disabled={!valid || saving} onClick={() => onSave(form)}>{saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Salvar</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function MarcasDialog({ open, onClose, marcas, empresaId, canEdit }: { open: boolean; onClose: () => void; marcas: Marca[]; empresaId: string; canEdit: boolean }) {
-  const qc = useQueryClient();
-  const [nome, setNome] = useState("");
-  const [cor, setCor] = useState("#3b82f6");
-
-  const create = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("marcas").insert({ empresa_id: empresaId, nome: nome.trim(), cor });
-      if (error) throw error;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["marcas"] }); setNome(""); toast.success("Marca criada"); },
-    onError: (e: any) => toast.error(e.message),
-  });
-  const remove = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("marcas").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["marcas"] }); toast.success("Marca removida"); },
-    onError: (e: any) => toast.error(e.message),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Marcas</DialogTitle><DialogDescription>Gerencie as marcas e suas cores identificadoras.</DialogDescription></DialogHeader>
-        {canEdit && (
-          <div className="flex gap-2 items-end">
-            <div className="flex-1"><Label>Nome</Label><Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Coca-Cola" /></div>
-            <div><Label>Cor</Label><Input type="color" value={cor} onChange={(e) => setCor(e.target.value)} className="w-16" /></div>
-            <Button onClick={() => create.mutate()} disabled={!nome.trim() || create.isPending}><Plus className="h-4 w-4" /></Button>
-          </div>
-        )}
-        <div className="space-y-1 max-h-72 overflow-auto">
-          {marcas.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Nenhuma marca cadastrada.</p>}
-          {marcas.map((m) => (
-            <div key={m.id} className="flex items-center gap-2 p-2 border rounded">
-              <span className="h-4 w-4 rounded" style={{ backgroundColor: m.cor }} />
-              <span className="flex-1 text-sm font-medium">{m.nome}</span>
-              {canEdit && <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => { if (confirm(`Excluir marca "${m.nome}"?`)) remove.mutate(m.id); }}><Trash2 className="h-3.5 w-3.5" /></Button>}
-            </div>
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full bg-white/5 rounded border border-white/10 cursor-pointer" onClick={onClick}>
+      {setores.map((s: Setor) => (
+        <rect key={s.id} x={s.pos_x * sx} y={s.pos_y * sy} width={s.largura * sx} height={s.altura * sy} fill={s.cor + "44"} stroke={s.cor} strokeWidth={0.5} />
+      ))}
+      {prateleiras.map((p: Prateleira) => (
+        <rect key={p.id} x={p.pos_x * sx} y={p.pos_y * sy} width={p.largura * sx} height={p.altura * sy} fill="white" opacity={0.6} />
+      ))}
+      <rect x={view.x * sx} y={view.y * sy} width={view.w * sx} height={view.h * sy} fill="none" stroke="hsl(190 95% 60%)" strokeWidth={1.5} />
+    </svg>
   );
 }

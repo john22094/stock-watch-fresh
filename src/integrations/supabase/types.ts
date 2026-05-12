@@ -246,6 +246,63 @@ export type Database = {
           },
         ]
       }
+      mapa_layout: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          expedicao_altura: number
+          expedicao_largura: number
+          expedicao_x: number
+          expedicao_y: number
+          id: string
+          paletes_altura: number
+          paletes_largura: number
+          paletes_x: number
+          paletes_y: number
+          recepcao_altura: number
+          recepcao_largura: number
+          recepcao_x: number
+          recepcao_y: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          expedicao_altura?: number
+          expedicao_largura?: number
+          expedicao_x?: number
+          expedicao_y?: number
+          id?: string
+          paletes_altura?: number
+          paletes_largura?: number
+          paletes_x?: number
+          paletes_y?: number
+          recepcao_altura?: number
+          recepcao_largura?: number
+          recepcao_x?: number
+          recepcao_y?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          expedicao_altura?: number
+          expedicao_largura?: number
+          expedicao_x?: number
+          expedicao_y?: number
+          id?: string
+          paletes_altura?: number
+          paletes_largura?: number
+          paletes_x?: number
+          paletes_y?: number
+          recepcao_altura?: number
+          recepcao_largura?: number
+          recepcao_x?: number
+          recepcao_y?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mapa_movimentacoes: {
         Row: {
           created_at: string
