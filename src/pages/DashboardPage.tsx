@@ -219,7 +219,6 @@ export default function DashboardPage() {
       const { data, error } = await supabase
         .from("estoque_log")
         .select("acao, created_at")
-        .eq("empresa_id", empresaId!)
         .gte("created_at", since);
       if (error) throw error;
       return data ?? [];
